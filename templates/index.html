@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EQUINOX | RECON INTELLIGENCE</title>
+  <link rel="stylesheet" href="/static/css/index.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+</head>
+
+<body>
+  <!-- Neo-Luxury Background -->
+  <div class="bg-canvas">
+    <div class="aurora aurora-1"></div>
+    <div class="aurora aurora-2"></div>
+    <div class="aurora aurora-3"></div>
+  </div>
+
+  <div id="splash-screen">
+    <div class="splash-content">
+      <div class="splash-logo" style="font-size: 5rem; letter-spacing: 0.15em;">EQUINOX</div>
+      <div
+        style="color: rgba(255,255,255,0.4); letter-spacing: 0.8em; font-size: 0.9rem; margin-top: 20px; font-weight: 200;">
+        RECON INTELLIGENCE</div>
+    </div>
+  </div>
+
+  <div class="app-container" id="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div>
+        <div class="sidebar-brand" style="letter-spacing: 0.2em;">
+          <div class="brand-dot"></div>
+          EQUINOX
+        </div>
+        <nav class="nav-menu">
+          <button class="nav-btn active" data-tab="zomato" onclick="switchTab('zomato')">
+            <span></span> Zomato
+          </button>
+          <button class="nav-btn" data-tab="swiggy" onclick="switchTab('swiggy')">
+            <span></span> Swiggy
+          </button>
+          <button class="nav-btn" data-tab="swiggy-dineout" onclick="switchTab('swiggy-dineout')">
+            <span></span> Dineout
+          </button>
+          <button class="nav-btn" data-tab="zomato-pay" onclick="switchTab('zomato-pay')">
+            <span></span> Zomato Pay
+          </button>
+        </nav>
+      </div>
+      <div class="sidebar-footer">
+        Built by Varun Reddy
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- Zomato Header -->
+      <section id="zomato-section" class="section active">
+        <div class="section-header">
+          <h1 class="page-title">ZOMATO<br>RECONCILIATION</h1>
+        </div>
+
+        <div class="luxury-card">
+          <form id="uploadForm">
+            <div class="form-grid">
+              <div class="input-container">
+                <label class="input-label">Client Name</label>
+                <input type="text" id="client_name" name="client_name" class="luxury-input" placeholder="Type name..."
+                  required>
+              </div>
+              <div class="input-container">
+                <label class="input-label">Month</label>
+                <select id="month" name="month" class="luxury-input" required>
+                  <option value="" disabled selected>Select Month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top: 30px;">
+              <div class="input-container">
+                <label class="input-label">First Week Range</label>
+                <div class="date-selector" id="firstWeekDisplay">
+                  <span id="firstWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="first_week_start" name="first_week_start">
+                <input type="hidden" id="first_week_end" name="first_week_end">
+              </div>
+              <div class="input-container">
+                <label class="input-label">Last Week Range</label>
+                <div class="date-selector" id="lastWeekDisplay">
+                  <span id="lastWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="last_week_start" name="last_week_start">
+                <input type="hidden" id="last_week_end" name="last_week_end">
+              </div>
+            </div>
+
+            <div class="input-container" style="margin-top: 30px;">
+              <label class="input-label">Transaction Invoices (.xlsx)</label>
+              <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-title">Drop Files</div>
+                <div class="drop-zone-hint">Support for multiple weekly invoices</div>
+                <input type="file" id="invoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+              </div>
+              <div id="fileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+            </div>
+
+            <div class="submit-container">
+              <button type="submit" class="luxury-submit" id="submitBtn">EXECUTE RECONCILIATION</button>
+            </div>
+          </form>
+
+          <div id="result" class="luxury-result">
+            <h3>RECONCILIATION COMPLETE</h3>
+            <a id="downloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Swiggy Section -->
+      <section id="swiggy-section" class="section">
+        <div class="section-header">
+          <h1 class="page-title">SWIGGY<br>RECONCILIATION</h1>
+        </div>
+
+        <div class="luxury-card">
+          <form id="swiggyUploadForm">
+            <div class="form-grid">
+              <div class="input-container">
+                <label class="input-label">Client Name</label>
+                <input type="text" id="swiggyClientName" name="clientName" class="luxury-input"
+                  placeholder="Type name..." required>
+              </div>
+              <div class="input-container">
+                <label class="input-label">Month</label>
+                <select id="swiggyMonth" name="month" class="luxury-input" required>
+                  <option value="" disabled selected>Select Month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top: 30px;">
+              <div class="input-container">
+                <label class="input-label">First Week Range</label>
+                <div class="date-selector" id="swiggyFirstWeekDisplay">
+                  <span id="swiggyFirstWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="swiggyFirstWeekStart" name="firstWeekStart">
+                <input type="hidden" id="swiggyFirstWeekEnd" name="firstWeekEnd">
+              </div>
+              <div class="input-container">
+                <label class="input-label">Last Week Range</label>
+                <div class="date-selector" id="swiggyLastWeekDisplay">
+                  <span id="swiggyLastWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="swiggyLastWeekStart" name="lastWeekStart">
+                <input type="hidden" id="swiggyLastWeekEnd" name="lastWeekEnd">
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top:30px;">
+              <div class="input-container">
+                <label class="input-label">Swiggy Invoices</label>
+                <div class="drop-zone" id="swiggyDropZone" style="height: 180px;">
+                  <div class="drop-zone-title">Drop Weekly Files</div>
+                  <input type="file" id="swiggyInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+                </div>
+                <div id="swiggyFileList" style="margin-top:10px; font-size: 0.7rem; color: rgba(255,255,255,0.3);">
+                </div>
+              </div>
+              <div class="input-container">
+                <label class="input-label">Bank Statement (Opt.)</label>
+                <div class="drop-zone" id="bankDropZone" style="height: 180px;">
+                  <div class="drop-zone-title">Attach Bank Data</div>
+                  <input type="file" id="bankFileInput" name="bankFile" accept=".xls,.xlsx" hidden>
+                </div>
+                <div id="bankFileList" style="margin-top:10px; font-size: 0.7rem; color: rgba(255,255,255,0.3);"></div>
+              </div>
+            </div>
+
+            <div class="submit-container">
+              <button type="submit" class="luxury-submit" id="swiggySubmitBtn">EXECUTE RECONCILIATION</button>
+            </div>
+          </form>
+          <div id="swiggyResult" class="luxury-result">
+            <h3>RECONCILIATION COMPLETE</h3>
+            <a id="swiggyDownloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Swiggy Dineout Section -->
+      <section id="swiggy-dineout-section" class="section">
+        <div class="section-header">
+          <h1 class="page-title">DINEOUT<br>RECONCILIATION</h1>
+        </div>
+
+        <div class="luxury-card">
+          <form id="dineoutUploadForm">
+            <div class="form-grid">
+              <div class="input-container">
+                <label class="input-label">Client Name</label>
+                <input type="text" id="dineoutClientName" name="clientName" class="luxury-input"
+                  placeholder="Type name...">
+              </div>
+              <div class="input-container">
+                <label class="input-label">Month</label>
+                <select id="dineoutMonth" name="month" class="luxury-input" required>
+                  <option value="" disabled selected>Select Month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="input-container" style="margin-top: 30px;">
+              <label class="input-label">Dineout Invoices</label>
+              <div class="drop-zone" id="dineoutDropZone">
+                <div class="drop-zone-title">Drop Weekly Files</div>
+                <div class="drop-zone-hint">Support for multiple invoices</div>
+                <input type="file" id="dineoutInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+              </div>
+              <div id="dineoutFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+            </div>
+
+            <div class="submit-container">
+              <button type="submit" class="luxury-submit" id="dineoutSubmitBtn">EXECUTE RECONCILIATION</button>
+            </div>
+          </form>
+          <div id="dineoutResult" class="luxury-result">
+            <h3>RECONCILIATION COMPLETE</h3>
+            <a id="dineoutDownloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Zomato Pay Section -->
+      <section id="zomato-pay-section" class="section">
+        <div class="section-header">
+          <h1 class="page-title">ZOMATO PAY<br>RECONCILIATION</h1>
+        </div>
+
+        <div class="luxury-card">
+          <form id="zomatoPayUploadForm">
+            <div class="form-grid">
+              <div class="input-container">
+                <label class="input-label">Client Name</label>
+                <input type="text" id="zpayClientName" name="clientName" class="luxury-input" placeholder="Type name..."
+                  required>
+              </div>
+              <div class="input-container">
+                <label class="input-label">Month</label>
+                <select id="zpayMonth" name="month" class="luxury-input" required>
+                  <option value="" disabled selected>Select Month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top: 30px;">
+              <div class="input-container">
+                <label class="input-label">First Week Range</label>
+                <div class="date-selector" id="zpayFirstWeekDisplay">
+                  <span id="zpayFirstWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="zpayFirstWeekStart" name="firstWeekStart">
+                <input type="hidden" id="zpayFirstWeekEnd" name="firstWeekEnd">
+              </div>
+              <div class="input-container">
+                <label class="input-label">Last Week Range</label>
+                <div class="date-selector" id="zpayLastWeekDisplay">
+                  <span id="zpayLastWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="zpayLastWeekStart" name="lastWeekStart">
+                <input type="hidden" id="zpayLastWeekEnd" name="lastWeekEnd">
+              </div>
+            </div>
+
+            <div class="input-container" style="margin-top: 30px;">
+              <label class="input-label">Consolidated Invoice (.xlsx)</label>
+              <div class="drop-zone" id="zpayDropZone">
+                <div class="drop-zone-title">Drop Single File</div>
+                <div class="drop-zone-hint">Integrated Zomato Pay Export</div>
+                <input type="file" id="zpayInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+              </div>
+              <div id="zpayFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+            </div>
+
+            <div class="submit-container">
+              <button type="submit" class="luxury-submit" id="zpaySubmitBtn">EXECUTE RECONCILIATION</button>
+            </div>
+          </form>
+          <div id="zpayResult" class="luxury-result">
+            <h3>RECONCILIATION COMPLETE</h3>
+            <a id="zpayDownloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Neo-Luxury Loading Overlay -->
+  <div id="loadingOverlay"
+    style="position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:99999; backdrop-filter: blur(20px);">
+    <div
+      style="font-family: 'Outfit', sans-serif; font-size: 5rem; font-weight: 900; color: white; margin-bottom: 20px; text-shadow: 0 0 30px rgba(255,255,255,0.3);"
+      id="loadingPercent">0%</div>
+    <div
+      style="width: 280px; height: 2px; background: rgba(255,255,255,0.1); position: relative; border-radius: 4px; overflow: hidden;">
+      <div id="loadingBar"
+        style="width: 0%; height: 100%; background: #fff; position: absolute; top:0; left:0; transition: width 0.3s; box-shadow: 0 0 15px #fff;">
+      </div>
+    </div>
+    <div
+      style="margin-top: 30px; font-size: 0.75rem; letter-spacing: 0.5em; color: rgba(255,255,255,0.4); text-transform: uppercase; font-weight: 600;">
+      Processing Intelligence</div>
+  </div>
+
+  <script>
+    // --- SPLASH SCREEN LOGIC ---
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        const container = document.getElementById('app-container');
+        splash.style.clipPath = 'circle(0% at 50% 50%)';
+        setTimeout(() => {
+          splash.style.display = 'none';
+          container.classList.add('active');
+        }, 1200);
+      }, 2500);
+    });
+
+    // --- TAB SWITCHING ---
+    function switchTab(tab) {
+      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+
+      const targetSec = document.getElementById(`${tab}-section`);
+      const targetBtn = document.querySelector(`[data-tab="${tab}"]`);
+
+      if (targetSec) targetSec.classList.add('active');
+      if (targetBtn) targetBtn.classList.add('active');
+    }
+
+    // --- FILE UPLOAD HELPERS ---
+    function setupFileUpload(dropZoneId, fileInputId, fileListId) {
+      const dropZone = document.getElementById(dropZoneId);
+      const fileInput = document.getElementById(fileInputId);
+      const fileList = document.getElementById(fileListId);
+
+      if (!dropZone || !fileInput) return;
+
+      dropZone.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', () => {
+        updateFileList(fileInput, fileList);
+      });
+
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#fff';
+        dropZone.style.background = 'rgba(255,255,255,0.05)';
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.style.borderColor = 'rgba(255,255,255,0.08)';
+        dropZone.style.background = 'transparent';
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = 'rgba(255,255,255,0.08)';
+        dropZone.style.background = 'transparent';
+        fileInput.files = e.dataTransfer.files;
+        updateFileList(fileInput, fileList);
+      });
+    }
+
+    function updateFileList(input, listElement) {
+      if (!listElement) return;
+      listElement.innerHTML = '';
+      if (input.files.length > 0) {
+        listElement.textContent = `${input.files.length} file(s) ready for processing`;
+      }
+    }
+
+    setupFileUpload('dropZone', 'invoices', 'fileList');
+    setupFileUpload('swiggyDropZone', 'swiggyInvoices', 'swiggyFileList');
+    setupFileUpload('bankDropZone', 'bankFileInput', 'bankFileList');
+    setupFileUpload('dineoutDropZone', 'dineoutInvoices', 'dineoutFileList');
+    setupFileUpload('zpayDropZone', 'zpayInvoices', 'zpayFileList');
+
+    // --- DATE PICKER SETUP ---
+    function setupDatePicker(displayId, startId, endId) {
+      const display = document.getElementById(displayId);
+      const startInput = document.getElementById(startId);
+      const endInput = document.getElementById(endId);
+      if (!display) return;
+      const textSpan = display.querySelector('span');
+
+      flatpickr(display, {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        onChange: function (selectedDates, dateStr, instance) {
+          if (selectedDates.length === 2) {
+            startInput.value = selectedDates[0].getDate();
+            endInput.value = selectedDates[1].getDate();
+            textSpan.textContent = dateStr;
+          }
+        }
+      });
+    }
+
+    setupDatePicker('firstWeekDisplay', 'first_week_start', 'first_week_end');
+    setupDatePicker('lastWeekDisplay', 'last_week_start', 'last_week_end');
+    setupDatePicker('swiggyFirstWeekDisplay', 'swiggyFirstWeekStart', 'swiggyFirstWeekEnd');
+    setupDatePicker('swiggyLastWeekDisplay', 'swiggyLastWeekStart', 'swiggyLastWeekEnd');
+    setupDatePicker('zpayFirstWeekDisplay', 'zpayFirstWeekStart', 'zpayFirstWeekEnd');
+    setupDatePicker('zpayLastWeekDisplay', 'zpayLastWeekStart', 'zpayLastWeekEnd');
+
+    // --- FORM HANDLING ---
+    async function handleFormSubmit(e, apiEndpoint, resultId, downloadLinkId) {
+      e.preventDefault();
+      const form = e.target;
+      const overlay = document.getElementById('loadingOverlay');
+      const progressText = document.getElementById('loadingPercent');
+      const progressBar = document.getElementById('loadingBar');
+
+      const taskId = 'task_' + Date.now();
+      const formData = new FormData(form);
+      formData.append('task_id', taskId);
+
+      overlay.style.display = 'flex';
+      progressBar.style.width = '0%';
+      progressText.textContent = '0%';
+
+      const progressInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/progress/${taskId}`);
+          const data = await res.json();
+          progressBar.style.width = `${data.progress}%`;
+          progressText.textContent = `${data.progress}%`;
+        } catch (err) { }
+      }, 1000);
+
+      try {
+        const response = await fetch(apiEndpoint, { method: 'POST', body: formData });
+        const result = await response.json();
+        clearInterval(progressInterval);
+        overlay.style.display = 'none';
+
+        if (result.success) {
+          const resDiv = document.getElementById(resultId);
+          const dlLink = document.getElementById(downloadLinkId);
+          resDiv.style.display = 'block';
+          dlLink.href = `/download/${result.filename || result.download_url.split('/').pop()}`;
+          resDiv.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          alert('Error: ' + result.message);
+        }
+      } catch (err) {
+        clearInterval(progressInterval);
+        overlay.style.display = 'none';
+        alert('Transmission Failure.');
+      }
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload', 'result', 'downloadLink'));
+    document.getElementById('swiggyUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/swiggy', 'swiggyResult', 'swiggyDownloadLink'));
+    document.getElementById('dineoutUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/swiggy-dineout', 'dineoutResult', 'dineoutDownloadLink'));
+    document.getElementById('zomatoPayUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/zomato-pay', 'zpayResult', 'zpayDownloadLink'));
+
+  </script>
+</body>
+
+</html>
