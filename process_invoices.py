@@ -5,8 +5,6 @@ import re
 import shutil
 import os
 import time
-import tkinter as tk
-from tkinter import filedialog, messagebox
 from datetime import datetime, timedelta
 import tempfile
 import gc  # Add at top
