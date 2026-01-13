@@ -369,54 +369,9 @@ def extract_zomato_week_range(filepath):
     return None
 
 
-def select_invoices_gui():
-    """GUI: ONLY invoices + template (auto temp folder + output)"""
-    root = tk.Tk()
-    root.withdraw()
 
-    # 1️⃣ Select multiple invoices ONLY
-    invoice_paths = filedialog.askopenfilenames(
-        title="Select Zomato Invoice Files (hold Ctrl/Cmd for multiple)",
-        filetypes=[("Excel files", "*.xlsx *.xls")]
-    )
+# GUI function removed for web deployment
 
-    if not invoice_paths:
-        return None
-
-    # 2️⃣ Select template ONLY
-    template_path = filedialog.askopenfilename(
-        title="Select Reconciliation Template",
-        filetypes=[("Excel files", "*.xlsx *.xls")]
-    )
-
-    if not template_path:
-        return None
-
-    # 🔄 AUTO: Create temp folder + copy invoices
-    invoice_folder_path = tempfile.mkdtemp(prefix="zomato_invoices_")
-    copied_files = []
-
-    for fp in invoice_paths:
-        filename = os.path.basename(fp)
-        dest = os.path.join(invoice_folder_path, filename)
-        shutil.copy2(fp, dest)
-        copied_files.append(dest)
-        print(f"✅ Copied: {filename}")
-
-    # 🔄 AUTO: Generate output path (template name + _output)
-    output_name = os.path.splitext(os.path.basename(template_path))[0] + "_output.xlsx"
-    output_folder = os.path.dirname(template_path)
-    output_path = os.path.join(output_folder, output_name)
-
-    print(f"📁 Temp invoices: {invoice_folder_path}")
-    print(f"💾 Output will be: {output_path}")
-
-    return {
-        'invoice_folder_path': invoice_folder_path,
-        'template_recon_path': template_path,
-        'output_path': output_path,
-        'copied_files': copied_files
-    }
 
 
 def parse_month_to_days(month_name):
