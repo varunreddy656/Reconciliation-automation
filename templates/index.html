@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zomato Reconciliation | Premium Automation</title>
+
+  <!-- Flatpickr CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --secondary: #ec4899;
+      --success: #10b981;
+      --error: #ef4444;
+      --dark: #0f172a;
+      --dark-light: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --glass: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.1);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--dark);
+      min-height: 100vh;
+      color: var(--text);
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Animated Background */
+    .background-animation {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      overflow: hidden;
+    }
+
+    .gradient-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.3;
+      animation: float 20s infinite ease-in-out;
+    }
+
+    .orb-1 {
+      width: 500px;
+      height: 500px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      top: -200px;
+      right: -200px;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: 400px;
+      height: 400px;
+      background: linear-gradient(135deg, #14b8a6, #8b5cf6);
+      bottom: -150px;
+      left: -150px;
+      animation-delay: 3s;
+    }
+
+    .orb-3 {
+      width: 350px;
+      height: 350px;
+      background: linear-gradient(135deg, #f59e0b, #ec4899);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      animation-delay: 6s;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -30px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+    }
+
+    /* Grid pattern overlay */
+    .grid-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* Header Credit */
+    .credit {
+      position: fixed;
+      top: 30px;
+      right: 40px;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      z-index: 100;
+      padding: 8px 16px;
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      animation: slideDown 0.6s ease;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 60px 20px;
+      position: relative;
+      z-index: 10;
+      animation: fadeInUp 0.8s ease;
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(40px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Glass Card */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 60px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 50px;
+    }
+
+    .header h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fff, var(--text-muted));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    @keyframes glow {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.2); }
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      font-weight: 400;
+    }
+
+    /* Form Styles */
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .form-group {
+      margin-bottom: 28px;
+      animation: slideIn 0.6s ease;
+      animation-fill-mode: both;
+    }
+
+    .form-group:nth-child(1) { animation-delay: 0.1s; }
+    .form-group:nth-child(2) { animation-delay: 0.2s; }
+    .form-group:nth-child(3) { animation-delay: 0.3s; }
+    .form-group:nth-child(4) { animation-delay: 0.4s; }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 16px 20px;
+      font-size: 1rem;
+      border: 1.5px solid var(--glass-border);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: inherit;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='14' height='8' viewBox='0 0 14 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L7 7L13 1' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 20px center;
+      padding-right: 50px;
+      cursor: pointer;
+    }
+
+    select option {
+      background: var(--dark-light);
+      color: var(--text);
+      padding: 10px;
+    }
+
+    input[type="text"]:focus,
+    select:focus {
+      outline: none;
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.05);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+      transform: translateY(-2px);
+    }
+
+    input[type="text"]::placeholder {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* Date Range Display */
+    .date-range-display {
+      padding: 16px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1.5px solid var(--glass-border);
+      border-radius: 12px;
+      font-size: 1rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 56px;
+      font-weight: 500;
+    }
+
+    .date-range-display:hover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.05);
+      transform: translateY(-2px);
+    }
+
+    .date-range-display.has-dates {
+      border-color: var(--success);
+      background: rgba(16, 185, 129, 0.05);
+      color: var(--success);
+    }
+
+    .calendar-icon {
+      font-size: 1.3rem;
+      transition: transform 0.3s ease;
+    }
+
+    .date-range-display:hover .calendar-icon {
+      transform: scale(1.1);
+    }
+
+    /* ============ FLATPICKR CALENDAR STYLING ============ */
+    .flatpickr-calendar {
+      background: #1e293b !important;
+      border: 2px solid rgba(99, 102, 241, 0.3) !important;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6) !important;
+      border-radius: 16px !important;
+      font-family: 'Inter', sans-serif !important;
+      padding: 10px;
+    }
+
+    /* Calendar header (month/year) */
+    .flatpickr-months {
+      background: transparent !important;
+      margin-bottom: 10px;
+    }
+
+    .flatpickr-month {
+      color: #f1f5f9 !important;
+      fill: #f1f5f9 !important;
+    }
+
+    .flatpickr-current-month {
+      color: #f1f5f9 !important;
+      font-size: 1.1rem !important;
+      font-weight: 600 !important;
+    }
+
+    .flatpickr-current-month input.cur-year {
+      color: #f1f5f9 !important;
+      font-weight: 600 !important;
+    }
+
+    .flatpickr-current-month .flatpickr-monthDropdown-months {
+      background: #0f172a !important;
+      color: #f1f5f9 !important;
+      border: 1px solid rgba(99, 102, 241, 0.3) !important;
+      appearance: none;
+    }
+
+    /* Navigation arrows */
+    .flatpickr-prev-month,
+    .flatpickr-next-month {
+      fill: #f1f5f9 !important;
+      color: #f1f5f9 !important;
+    }
+
+    .flatpickr-prev-month:hover,
+    .flatpickr-next-month:hover {
+      color: var(--primary) !important;
+      fill: var(--primary) !important;
+    }
+
+    .flatpickr-prev-month svg,
+    .flatpickr-next-month svg {
+      fill: #f1f5f9 !important;
+    }
+
+    .flatpickr-prev-month:hover svg,
+    .flatpickr-next-month:hover svg {
+      fill: var(--primary) !important;
+    }
+
+    /* Weekday labels (Sun, Mon, Tue, etc.) */
+    .flatpickr-weekdays {
+      background: transparent !important;
+      margin-bottom: 8px;
+    }
+
+    .flatpickr-weekday {
+      color: #94a3b8 !important;
+      font-weight: 600 !important;
+      font-size: 0.85rem !important;
+    }
+
+    /* Day numbers */
+    .flatpickr-day {
+      color: #f1f5f9 !important;
+      font-weight: 500 !important;
+      border-radius: 8px !important;
+      margin: 2px !important;
+      border: 1px solid transparent !important;
+    }
+
+    .flatpickr-day:hover {
+      background: rgba(99, 102, 241, 0.2) !important;
+      border-color: var(--primary) !important;
+      color: #ffffff !important;
+    }
+
+    /* Selected date(s) */
+    .flatpickr-day.selected {
+      background: var(--primary) !important;
+      border-color: var(--primary) !important;
+      color: #ffffff !important;
+      font-weight: 700 !important;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+    }
+
+    .flatpickr-day.selected:hover {
+      background: var(--primary-dark) !important;
+      border-color: var(--primary-dark) !important;
+    }
+
+    /* Date range (dates between start and end) */
+    .flatpickr-day.inRange {
+      background: rgba(99, 102, 241, 0.15) !important;
+      border-color: rgba(99, 102, 241, 0.3) !important;
+      color: #ffffff !important;
+      box-shadow: none !important;
+    }
+
+    .flatpickr-day.startRange,
+    .flatpickr-day.endRange {
+      background: var(--primary) !important;
+      border-color: var(--primary) !important;
+      color: #ffffff !important;
+      font-weight: 700 !important;
+    }
+
+    /* Today */
+    .flatpickr-day.today {
+      border-color: var(--success) !important;
+      background: rgba(16, 185, 129, 0.1) !important;
+      color: var(--success) !important;
+      font-weight: 600 !important;
+    }
+
+    .flatpickr-day.today:hover {
+      background: rgba(16, 185, 129, 0.2) !important;
+      color: #ffffff !important;
+    }
+
+    /* Disabled days (outside month) */
+    .flatpickr-day.flatpickr-disabled,
+    .flatpickr-day.prevMonthDay,
+    .flatpickr-day.nextMonthDay {
+      color: #475569 !important;
+      opacity: 0.4 !important;
+    }
+
+    /* Calendar positioning fix */
+    .flatpickr-calendar.open {
+      z-index: 999999 !important;
+      margin-top: 8px !important;
+    }
+
+    .flatpickr-calendar.arrowTop::before,
+    .flatpickr-calendar.arrowTop::after {
+      border-bottom-color: #1e293b !important;
+    }
+
+    /* File Upload Drop Zone */
+    .file-input-wrapper {
+      margin-bottom: 32px;
+      animation: slideIn 0.6s ease 0.5s;
+      animation-fill-mode: both;
+    }
+
+    .file-input-wrapper input[type="file"] {
+      display: none;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--glass-border);
+      border-radius: 16px;
+      padding: 50px 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      background: rgba(255, 255, 255, 0.02);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .drop-zone::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg,
+        transparent,
+        rgba(99, 102, 241, 0.1),
+        transparent
+      );
+      transition: left 0.5s ease;
+    }
+
+    .drop-zone:hover::before {
+      left: 100%;
+    }
+
+    .drop-zone:hover {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.05);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.2);
+    }
+
+    .drop-zone.drag-over {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.1);
+      transform: scale(1.02);
+    }
+
+    .drop-zone-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      display: block;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .drop-zone-text {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .drop-zone-hint {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+
+    .drop-zone.has-files {
+      border-color: var(--success);
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .drop-zone.has-files .drop-zone-text {
+      color: var(--success);
+    }
+
+    .file-list {
+      margin-top: 20px;
+      max-height: 150px;
+      overflow-y: auto;
+      display: none;
+      scrollbar-width: thin;
+      scrollbar-color: var(--primary) transparent;
+    }
+
+    .file-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .file-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .file-list::-webkit-scrollbar-thumb {
+      background: var(--primary);
+      border-radius: 3px;
+    }
+
+    .file-list.show {
+      display: block;
+    }
+
+    .file-item {
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid var(--glass-border);
+      animation: slideIn 0.3s ease;
+    }
+
+    .file-item::before {
+      content: '📄';
+      font-size: 20px;
+    }
+
+    /* Submit Button */
+    .submit-btn {
+      width: 100%;
+      padding: 18px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: white;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      margin-top: 12px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+      animation: slideIn 0.6s ease 0.6s;
+      animation-fill-mode: both;
+    }
+
+    .submit-btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+
+    .submit-btn:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 15px 40px rgba(99, 102, 241, 0.4);
+    }
+
+    .submit-btn:active {
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:disabled {
+      background: var(--dark-light);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Processing Loader */
+    .processing-loader {
+      display: none;
+      text-align: center;
+      margin-top: 32px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 16px;
+      border: 1px solid var(--glass-border);
+    }
+
+    .processing-loader.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .spinner-container {
+      width: 70px;
+      height: 70px;
+      margin: 0 auto 20px;
+      position: relative;
+    }
+
+    .spinner {
+      width: 100%;
+      height: 100%;
+      border: 4px solid rgba(99, 102, 241, 0.2);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 1.05rem;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Result */
+    .result {
+      margin-top: 32px;
+      padding: 24px 28px;
+      border-radius: 16px;
+      display: none;
+      animation: slideIn 0.4s ease;
+      border: 1px solid;
+    }
+
+    .result.success {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .result.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    .result h3 {
+      font-size: 1.2rem;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .result p {
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 8px;
+      opacity: 0.9;
+    }
+
+    .download-btn {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 12px 28px;
+      background: linear-gradient(135deg, var(--success), #059669);
+      color: white;
+      text-decoration: none;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      transition: all 0.3s ease;
+      border: none;
+      box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+    }
+
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .credit {
+        position: static;
+        text-align: center;
+        margin: 20px auto;
+        display: block;
+        width: fit-content;
+      }
+
+      .container {
+        padding: 40px 15px;
+      }
+
+      .card {
+        padding: 35px 25px;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .drop-zone {
+        padding: 40px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Animated Background -->
+  <div class="background-animation">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+  <div class="grid-overlay"></div>
+
+  <div class="credit">Built by Varun Reddy</div>
+
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h1>Zomato Reconciliation</h1>
+        <p>Premium Invoice Automation Platform</p>
+      </div>
+
+      <form id="uploadForm" enctype="multipart/form-data">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="client_name">Client Name</label>
+            <input type="text" id="client_name" name="client_name" placeholder="Enter client name">
+          </div>
+
+          <div class="form-group">
+            <label for="month">Month (Required)</label>
+            <select id="month" name="month" required>
+              <option value="" disabled selected>Select Month</option>
+              <option value="January">January</option>
+              <option value="February">February</option>
+              <option value="March">March</option>
+              <option value="April">April</option>
+              <option value="May">May</option>
+              <option value="June">June</option>
+              <option value="July">July</option>
+              <option value="August">August</option>
+              <option value="September">September</option>
+              <option value="October">October</option>
+              <option value="November">November</option>
+              <option value="December">December</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="first_week_range">First Week</label>
+            <div class="date-range-display" id="firstWeekDisplay">
+              <span id="firstWeekText">Select dates</span>
+              <span class="calendar-icon">📅</span>
+            </div>
+            <input type="text" id="first_week_range" style="display: none;">
+            <input type="hidden" id="first_week_start" name="first_week_start">
+            <input type="hidden" id="first_week_end" name="first_week_end">
+          </div>
+
+          <div class="form-group">
+            <label for="last_week_range">Last Week</label>
+            <div class="date-range-display" id="lastWeekDisplay">
+              <span id="lastWeekText">Select dates</span>
+              <span class="calendar-icon">📅</span>
+            </div>
+            <input type="text" id="last_week_range" style="display: none;">
+            <input type="hidden" id="last_week_start" name="last_week_start">
+            <input type="hidden" id="last_week_end" name="last_week_end">
+          </div>
+        </div>
+
+        <div class="file-input-wrapper">
+          <label for="invoices">Invoice Files (.xlsx)</label>
+          <input type="file" id="invoices" name="invoices" multiple accept=".xlsx,.xls" required>
+
+          <div class="drop-zone" id="dropZone">
+            <span class="drop-zone-icon">📁</span>
+            <div class="drop-zone-text" id="dropZoneText">Drop invoices here or click to browse</div>
+            <div class="drop-zone-hint">Supports multiple files (.xlsx, .xls)</div>
+          </div>
+
+          <div class="file-list" id="fileList"></div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          🚀 Process Invoices
+        </button>
+      </form>
+
+      <div class="processing-loader" id="loading">
+        <div class="spinner-container">
+          <div class="spinner"></div>
+        </div>
+        <div class="loading-text">Processing your invoices...</div>
+      </div>
+
+      <div id="result" class="result"></div>
+    </div>
+  </div>
+
+  <!-- Flatpickr JS -->
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <script>
+    // Month mapping
+    const monthMap = {
+      'January': 1, 'February': 2, 'March': 3, 'April': 4,
+      'May': 5, 'June': 6, 'July': 7, 'August': 8,
+      'September': 9, 'October': 10, 'November': 11, 'December': 12
+    };
+
+    // Flatpickr for First Week
+    const firstWeekPicker = flatpickr("#first_week_range", {
+      mode: "range",
+      dateFormat: "d M Y",
+      inline: false,
+      appendTo: document.body,
+      onChange: function(selectedDates, dateStr, instance) {
+        if (selectedDates.length === 2) {
+          const start = selectedDates[0];
+          const end = selectedDates[1];
+
+          document.getElementById('first_week_start').value = start.getDate();
+          document.getElementById('first_week_end').value = end.getDate();
+          document.getElementById('firstWeekText').textContent = dateStr;
+          document.getElementById('firstWeekDisplay').classList.add('has-dates');
+        }
+      }
+    });
+
+    // Flatpickr for Last Week
+    const lastWeekPicker = flatpickr("#last_week_range", {
+      mode: "range",
+      dateFormat: "d M Y",
+      inline: false,
+      appendTo: document.body,
+      onChange: function(selectedDates, dateStr, instance) {
+        if (selectedDates.length === 2) {
+          const start = selectedDates[0];
+          const end = selectedDates[1];
+
+          document.getElementById('last_week_start').value = start.getDate();
+          document.getElementById('last_week_end').value = end.getDate();
+          document.getElementById('lastWeekText').textContent = dateStr;
+          document.getElementById('lastWeekDisplay').classList.add('has-dates');
+        }
+      }
+    });
+
+    // Click handlers
+    document.getElementById('firstWeekDisplay').addEventListener('click', function() {
+      firstWeekPicker.open();
+    });
+
+    document.getElementById('lastWeekDisplay').addEventListener('click', function() {
+      lastWeekPicker.open();
+    });
+
+    // File upload
+    const fileInput = document.getElementById('invoices');
+    const dropZone = document.getElementById('dropZone');
+    const dropZoneText = document.getElementById('dropZoneText');
+    const fileList = document.getElementById('fileList');
+    const form = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const loading = document.getElementById('loading');
+    const result = document.getElementById('result');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, e => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => {
+        dropZone.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => {
+        dropZone.classList.remove('drag-over');
+      });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      fileInput.files = e.dataTransfer.files;
+      updateFileDisplay(fileInput.files);
+    });
+
+    fileInput.addEventListener('change', () => {
+      updateFileDisplay(fileInput.files);
+    });
+
+    function updateFileDisplay(files) {
+      if (files.length > 0) {
+        dropZone.classList.add('has-files');
+        dropZoneText.textContent = `${files.length} file${files.length > 1 ? 's' : ''} selected`;
+
+        fileList.innerHTML = '';
+        fileList.classList.add('show');
+
+        Array.from(files).forEach(file => {
+          const fileItem = document.createElement('div');
+          fileItem.className = 'file-item';
+          fileItem.textContent = file.name;
+          fileList.appendChild(fileItem);
+        });
+      } else {
+        dropZone.classList.remove('has-files');
+        dropZoneText.textContent = 'Drop invoices here or click to browse';
+        fileList.classList.remove('show');
+      }
+    }
+
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      if (fileInput.files.length === 0) {
+        alert('Please select invoice files');
+        return;
+      }
+
+      if (!document.getElementById('first_week_start').value || !document.getElementById('last_week_start').value) {
+        alert('Please select both first and last week date ranges');
+        return;
+      }
+
+      const formData = new FormData(form);
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '⏳ Processing...';
+      loading.classList.add('active');
+      result.style.display = 'none';
+
+      try {
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+
+        result.style.display = 'block';
+
+        if (data.success) {
+          result.className = 'result success';
+          result.innerHTML = `
+            <h3>✅ Success!</h3>
+            <p>${data.message}</p>
+            <p><strong>Weeks Processed:</strong> ${data.weeks_processed}</p>
+            <a href="${data.download_url}" class="download-btn">📥 Download Reconciliation</a>
+          `;
+        } else {
+          result.className = 'result error';
+          result.innerHTML = `
+            <h3>❌ Error</h3>
+            <p>${data.message}</p>
+          `;
+        }
+      } catch (error) {
+        result.style.display = 'block';
+        result.className = 'result error';
+        result.innerHTML = `
+          <h3>❌ Error</h3>
+          <p>${error.message}</p>
+        `;
+      } finally {
+        loading.classList.remove('active');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🚀 Process Invoices';
+      }
+    });
+  </script>
+</body>
+</html>
