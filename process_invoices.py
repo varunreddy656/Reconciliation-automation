@@ -5,15 +5,11 @@ import re
 import shutil
 import os
 import time
-import tkinter as tk
-from tkinter import filedialog, messagebox
 from datetime import datetime, timedelta
-import tempfile
-import gc  # Add at top
 import calendar
-from openpyxl.styles import Font, Alignment
-from openpyxl.utils import get_column_letter
-
+import tempfile
+import re
+from pathlib import Path
 
 # ===================== ZOMATO-SPECIFIC HELPERS =====================
 
@@ -46,7 +42,6 @@ def parse(date_str, dayfirst=True):
             continue
 
     # Last resort - extract first number
-    import re
     match = re.search(r'\d+', date_str)
     if match:
         return datetime(2025, 1, int(match.group()))
@@ -64,25 +59,15 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
     current_year = current_date.year
     month_num = datetime.strptime(month, "%B").month
 
-    # If target month is ahead of current month (e.g. processing Dec in Jan), likely previous year
-    # But checking strictly > might be risky if processing same month next year? Unlikely.
-    # Safe heuristic: If target month is more than 6 months ahead, assume previous year.
-    # Actually, simpler: If target month > current month, assume previous year.
     if month_num > current_date.month and (month_num - current_date.month) > 6:
-       # e.g. Target Nov (11), Current Jan (1) -> 11 > 1. Diff 10. Previous year.
        year = current_year - 1
     elif month_num > current_date.month:
-       # e.g. Target Dec (12), Current Jan (1). Diff 11. Previous year.
        year = current_year - 1
     elif month_num == 12 and current_date.month == 1:
-       # Explicit check for Dec processing in Jan
        year = current_year - 1
     else:
        year = current_year
        
-    # Allow override if user is clearly processing old data? 
-    # For now, this inference covers the "Dec 2025 processing in Jan 2026" case.
-    
     # Parse day numbers
     first_start_day = int(str(first_week_start).strip())
     first_end_day = int(str(first_week_end).strip())
@@ -90,7 +75,6 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
     last_end_day = int(str(last_week_end).strip())
 
     # Determine actual months for each date
-    # If first week start day > first week end day, it's from previous month
     if first_start_day > first_end_day:
         first_start_month = month_num - 1 if month_num > 1 else 12
         first_start_year = year if month_num > 1 else year - 1
@@ -120,8 +104,7 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
 
     weeks = []
 
-    # ✅ FIXED: First week - only show dates in target month for label
-    # For label: if spillover at start, show from 1st of target month
+    # First week
     first_week_label_start = 1 if first_start.month != month_num else first_start.day
     first_week_label_end = first_end.day
 
@@ -155,8 +138,7 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
         current_start = current_end + timedelta(days=1)
         week_counter += 1
 
-    # ✅ FIXED: Last week - only show dates in target month for label
-    # For label: if spillover at end, show till last day of target month
+    # Last week
     last_week_label_start = last_start.day
     last_week_label_end = calendar.monthrange(year, month_num)[1] if last_end.month != month_num else last_end.day
 
@@ -178,11 +160,6 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
     Match invoice filename to correct week in structure
     Returns: week_num or None if no match
     """
-
-    # Parse filename dates
-    # Expected format: "Restaurant_Name_27_Oct_to_2_Nov_2024.xlsx"
-    # OR: "27_Oct_2024_2_Nov_2024.xlsx"
-
     try:
         # Remove .xlsx/.xls extension
         name_without_ext = invoice_filename.replace('.xlsx', '').replace('.xls', '')
@@ -193,14 +170,11 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
         print(f"\n🔍 Parsing invoice: {invoice_filename}")
         print(f"   Parts: {parts}")
 
-        # Try to find date pattern: DAY_MONTH_...DAY_MONTH_YEAR
-        # Look for numbers followed by month names
-
         start_day = None
         start_month = None
         end_day = None
         end_month = None
-        year = datetime.now().year  # Default to current year instead of 2025
+        year = datetime.now().year
 
         # Find first date (start)
         for i in range(len(parts) - 1):
@@ -248,29 +222,11 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
         start_month_num = month_map[start_month]
         end_month_num = month_map[end_month]
 
-        # Use parsed year if reasonable (e.g. within last 2 years), else trust filename
-        # But wait, filename ALREADY has year: {year}
-        # If filename year is missing (defaulted to 2025 in old code?), use smart inference
-        
-        current_dt = datetime.now()
-        
-        # If year was not parsed from filename (defaulted to 2025 in loop init), infer it
-        # Actually, the logic above defaults year=2025. We should default to current_dt.year or previous
-        # We can't easily know here without filename parts.
-        
-        # NOTE: The loop above attempts to extract year. If it fails, year remains default.
-        # Let's check if year is still default AND if it's "unreasonable" (e.g. user hardcoded 2025 but we are in 2030)
-        # But actually, the loop parsing logic:
-        # if len(parts[i+2]) == 4: year = int(...)
-        # So if filename has year, we use it. If not, we use default.
-        # We should set default to current year.
-        
         # Create datetime objects
         try:
            invoice_start = datetime(year, start_month_num, start_day)
            invoice_end = datetime(year, end_month_num, end_day)
         except ValueError:
-           # Handle leap years etc if year was wrong
            print(f"   ❌ Invalid date with year {year}")
            return None
 
@@ -288,20 +244,7 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
             return week['week_num']
 
     print(f"   ⚠️ No matching week found")
-    print(f"      Invoice dates: {invoice_start.date()} to {invoice_end.date()}")
-    print(f"      Available weeks:")
-    for week in week_structure:
-        print(f"         Week {week['week_num']}: {week['start_date'].date()} to {week['end_date'].date()}")
     return None
-
-
-def ordinal(n):
-    """Convert number to ordinal (1 -> 1st, 2 -> 2nd, etc.)"""
-    if 10 <= n % 100 <= 20:
-        suffix = 'th'
-    else:
-        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
-    return f"{n}{suffix}"
 
 
 def extract_zomato_week_range(filepath):
@@ -309,7 +252,6 @@ def extract_zomato_week_range(filepath):
     filename = Path(filepath).name
 
     # 🎯 PRIMARY: Parse filename like "01_Sep_2025_07_Sep_2025"
-    # ✅ FIXED REGEX - Don't capture year as day!
     date_match = re.search(r'(\d{1,2})_([A-Za-z]{3})_\d{4}_(\d{1,2})_([A-Za-z]{3})_\d{4}', filename)
 
     if date_match:
@@ -317,14 +259,10 @@ def extract_zomato_week_range(filepath):
         start_month = date_match.group(2)
         end_day = int(date_match.group(3))
         end_month = date_match.group(4)
-
         print(f"✅ FILENAME PARSED: {start_day} {start_month} → {end_day} {end_month}")
-
         return {
-            'start_day': start_day,
-            'start_month': start_month,
-            'end_day': end_day,
-            'end_month': end_month,
+            'start_day': start_day, 'start_month': start_month,
+            'end_day': end_day, 'end_month': end_month,
             'full_text': f"{start_day} {start_month} to {end_day} {end_month}"
         }
 
@@ -344,79 +282,28 @@ def extract_zomato_week_range(filepath):
             r'(\d{1,2})\s*([A-Za-z]{3})\s*[-to]+\s*(\d{1,2})\s*([A-Za-z]{3})',
             r'(\d{1,2})\s*-\s*(\d{1,2})\s*([A-Za-z]{3})',
         ]
-
         for pattern in patterns:
             m = re.search(pattern, text, re.IGNORECASE)
             if m and len(m.groups()) >= 2:
                 start_day = int(m.group(1))
                 end_day = int(m.group(2)) if len(m.groups()) >= 3 else int(m.group(1))
                 month = m.group(3)[:3] if len(m.groups()) > 2 else m.group(2)[:3]
-                print(f"✅ SHEET PARSED: {start_day}-{end_day} {month}")
                 return {
-                    'start_day': start_day,
-                    'start_month': month,
-                    'end_day': end_day,
-                    'end_month': month,
+                    'start_day': start_day, 'start_month': month,
+                    'end_day': end_day, 'end_month': month,
                     'full_text': f"{start_day} {month} to {end_day} {month}"
                 }
     except:
         pass
     finally:
-        if wb:
-            wb.close()
-
+        if wb: wb.close()
     print(f"❌ Could not parse filename or sheets: {filename}")
     return None
 
-
 def select_invoices_gui():
-    """GUI: ONLY invoices + template (auto temp folder + output)"""
-    root = tk.Tk()
-    root.withdraw()
-
-    # 1️⃣ Select multiple invoices ONLY
-    invoice_paths = filedialog.askopenfilenames(
-        title="Select Zomato Invoice Files (hold Ctrl/Cmd for multiple)",
-        filetypes=[("Excel files", "*.xlsx *.xls")]
-    )
-
-    if not invoice_paths:
-        return None
-
-    # 2️⃣ Select template ONLY
-    template_path = filedialog.askopenfilename(
-        title="Select Reconciliation Template",
-        filetypes=[("Excel files", "*.xlsx *.xls")]
-    )
-
-    if not template_path:
-        return None
-
-    # 🔄 AUTO: Create temp folder + copy invoices
-    invoice_folder_path = tempfile.mkdtemp(prefix="zomato_invoices_")
-    copied_files = []
-
-    for fp in invoice_paths:
-        filename = os.path.basename(fp)
-        dest = os.path.join(invoice_folder_path, filename)
-        shutil.copy2(fp, dest)
-        copied_files.append(dest)
-        print(f"✅ Copied: {filename}")
-
-    # 🔄 AUTO: Generate output path (template name + _output)
-    output_name = os.path.splitext(os.path.basename(template_path))[0] + "_output.xlsx"
-    output_folder = os.path.dirname(template_path)
-    output_path = os.path.join(output_folder, output_name)
-
-    print(f"📁 Temp invoices: {invoice_folder_path}")
-    print(f"💾 Output will be: {output_path}")
-
-    return {
-        'invoice_folder_path': invoice_folder_path,
-        'template_recon_path': template_path,
-        'output_path': output_path,
-        'copied_files': copied_files
-    }
+    """Deprecated GUI function - removed for web deployment"""
+    print("GUI not available in web mode")
+    return None
 
 
 def parse_month_to_days(month_name):
