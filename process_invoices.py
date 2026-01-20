@@ -5,11 +5,10 @@ import re
 import shutil
 import os
 import time
+import gc
 from datetime import datetime, timedelta
 import calendar
 import tempfile
-import re
-from pathlib import Path
 
 # ===================== ZOMATO-SPECIFIC HELPERS =====================
 
