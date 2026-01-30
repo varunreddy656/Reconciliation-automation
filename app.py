@@ -68,7 +68,14 @@ def cleanup_folder_delayed(folder_path, delay=3):
         try:
             if os.path.exists(folder_path):
                 shutil.rmtree(folder_path)
-                print(f"✅ Cleaned up: {folder_path}")
+                print(f"✅ Cleaned up session folder: {folder_path}")
+            
+            # Also clean up the progress file if possible
+            # Get session_id from folder name
+            session_id = os.path.basename(folder_path)
+            # We don't necessarily know the task_id here, but we can search for it
+            # if we standardized task_id to follow session_id or just clean up old ones.
+            # For now, rely on cleanup_old_files for the .progress files if we can't link them easily.
         except Exception as e:
             print(f"⚠️  Could not cleanup {folder_path}: {e}")
 
@@ -77,20 +84,30 @@ def cleanup_folder_delayed(folder_path, delay=3):
 
 
 # Task Progress Tracking
-TASK_PROGRESS = {}
-
 def update_progress(task_id, progress):
-    """Update progress for a specific task"""
+    """Update progress for a specific task using a temporary file"""
     if task_id:
-        TASK_PROGRESS[task_id] = progress
-        print(f"Task {task_id} progress: {progress}%")
+        try:
+            progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
+            with open(progress_file, 'w') as f:
+                f.write(str(progress))
+            print(f"Task {task_id} progress: {progress}%")
+        except Exception as e:
+            print(f"⚠️ Error updating progress file: {e}")
 
 @app.route('/progress/<task_id>')
 def get_progress(task_id):
-    """Get current progress for a task"""
-    return jsonify({
-        'progress': TASK_PROGRESS.get(task_id, 0)
-    })
+    """Get current progress for a task from its progress file"""
+    try:
+        progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
+        if os.path.exists(progress_file):
+            with open(progress_file, 'r') as f:
+                progress = f.read().strip()
+                return jsonify({'progress': int(progress)})
+    except Exception as e:
+        print(f"⚠️ Error reading progress file: {e}")
+    
+    return jsonify({'progress': 0})
 
 @app.route('/')
 def index():
@@ -565,6 +582,14 @@ def cleanup_old_files():
                 if age > 3600:  # 1 hour
                     try:
                         shutil.rmtree(item_path)
+                        cleaned += 1
+                    except:
+                        pass
+            elif item.endswith('.progress'):
+                age = now - os.path.getmtime(item_path)
+                if age > 3600: # 1 hour
+                    try:
+                        os.remove(item_path)
                         cleaned += 1
                     except:
                         pass
