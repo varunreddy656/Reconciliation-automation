@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EQUINOX | RECON INTELLIGENCE</title>
+  <title>AUTO RECONCILE</title>
   <link rel="stylesheet" href="/static/css/index.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -20,10 +20,10 @@
 
   <div id="splash-screen">
     <div class="splash-content">
-      <div class="splash-logo" style="font-size: 5rem; letter-spacing: 0.15em;">EQUINOX</div>
+      <div class="splash-logo" style="font-size: 5rem; letter-spacing: 0.15em;">AUTO RECONCILE</div>
       <div
         style="color: rgba(255,255,255,0.4); letter-spacing: 0.8em; font-size: 0.9rem; margin-top: 20px; font-weight: 200;">
-        RECON INTELLIGENCE</div>
+        INTELLIGENT SYSTEM</div>
     </div>
   </div>
 
@@ -33,7 +33,7 @@
       <div>
         <div class="sidebar-brand" style="letter-spacing: 0.2em;">
           <div class="brand-dot"></div>
-          EQUINOX
+          AUTO RECONCILE
         </div>
         <nav class="nav-menu">
           <button class="nav-btn active" data-tab="zomato" onclick="switchTab('zomato')">
@@ -47,6 +47,9 @@
           </button>
           <button class="nav-btn" data-tab="zomato-pay" onclick="switchTab('zomato-pay')">
             <span></span> Zomato Pay
+          </button>
+          <button class="nav-btn" data-tab="paytm" onclick="switchTab('paytm')">
+            <span></span> Paytm
           </button>
         </nav>
       </div>
@@ -65,7 +68,14 @@
         </div>
 
         <div class="luxury-card">
+          <div class="recon-type-toggle">
+            <button type="button" class="toggle-btn active" id="zomato-weekly-btn"
+              onclick="setReconMode('weekly')">WEEKLY</button>
+            <button type="button" class="toggle-btn" id="zomato-consolidated-btn"
+              onclick="setReconMode('consolidated')">CONSOLIDATED</button>
+          </div>
           <form id="uploadForm">
+            <input type="hidden" id="recon_mode" name="recon_mode" value="weekly">
             <div class="form-grid">
               <div class="input-container">
                 <label class="input-label">Client Name</label>
@@ -92,22 +102,24 @@
               </div>
             </div>
 
-            <div class="form-grid" style="margin-top: 30px;">
-              <div class="input-container">
-                <label class="input-label">First Week Range</label>
-                <div class="date-selector" id="firstWeekDisplay">
-                  <span id="firstWeekText">Select dates</span>
+            <div id="week-ranges-container">
+              <div class="form-grid" style="margin-top: 30px;">
+                <div class="input-container">
+                  <label class="input-label">First Week Range</label>
+                  <div class="date-selector" id="firstWeekDisplay">
+                    <span id="firstWeekText">Select dates</span>
+                  </div>
+                  <input type="hidden" id="first_week_start" name="first_week_start">
+                  <input type="hidden" id="first_week_end" name="first_week_end">
                 </div>
-                <input type="hidden" id="first_week_start" name="first_week_start">
-                <input type="hidden" id="first_week_end" name="first_week_end">
-              </div>
-              <div class="input-container">
-                <label class="input-label">Last Week Range</label>
-                <div class="date-selector" id="lastWeekDisplay">
-                  <span id="lastWeekText">Select dates</span>
+                <div class="input-container">
+                  <label class="input-label">Last Week Range</label>
+                  <div class="date-selector" id="lastWeekDisplay">
+                    <span id="lastWeekText">Select dates</span>
+                  </div>
+                  <input type="hidden" id="last_week_start" name="last_week_start">
+                  <input type="hidden" id="last_week_end" name="last_week_end">
                 </div>
-                <input type="hidden" id="last_week_start" name="last_week_start">
-                <input type="hidden" id="last_week_end" name="last_week_end">
               </div>
             </div>
 
@@ -346,6 +358,81 @@
         </div>
       </section>
 
+      <!-- Paytm Section -->
+      <section id="paytm-section" class="section">
+        <div class="section-header">
+          <h1 class="page-title">PAYTM<br>RECONCILIATION</h1>
+        </div>
+
+        <div class="luxury-card">
+          <form id="paytmUploadForm">
+            <div class="form-grid">
+              <div class="input-container">
+                <label class="input-label">Client Name</label>
+                <input type="text" id="paytmClientName" name="clientName" class="luxury-input"
+                  placeholder="Type name..." required>
+              </div>
+              <div class="input-container">
+                <label class="input-label">Month</label>
+                <select id="paytmMonth" name="month" class="luxury-input" required>
+                  <option value="" disabled selected>Select Month</option>
+                  <option value="January">January</option>
+                  <option value="February">February</option>
+                  <option value="March">March</option>
+                  <option value="April">April</option>
+                  <option value="May">May</option>
+                  <option value="June">June</option>
+                  <option value="July">July</option>
+                  <option value="August">August</option>
+                  <option value="September">September</option>
+                  <option value="October">October</option>
+                  <option value="November">November</option>
+                  <option value="December">December</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid" style="margin-top: 30px;">
+              <div class="input-container">
+                <label class="input-label">First Week Range</label>
+                <div class="date-selector" id="paytmFirstWeekDisplay">
+                  <span id="paytmFirstWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="paytmFirstWeekStart" name="firstWeekStart">
+                <input type="hidden" id="paytmFirstWeekEnd" name="firstWeekEnd">
+              </div>
+              <div class="input-container">
+                <label class="input-label">Last Week Range</label>
+                <div class="date-selector" id="paytmLastWeekDisplay">
+                  <span id="paytmLastWeekText">Select dates</span>
+                </div>
+                <input type="hidden" id="paytmLastWeekStart" name="lastWeekStart">
+                <input type="hidden" id="paytmLastWeekEnd" name="lastWeekEnd">
+              </div>
+            </div>
+
+            <div class="input-container" style="margin-top: 30px;">
+              <label class="input-label">Paytm Transaction File (.xlsx/.csv)</label>
+              <div class="drop-zone" id="paytmDropZone">
+                <div class="drop-zone-title">Drop Paytm File</div>
+                <div class="drop-zone-hint">Support for single consolidated file</div>
+                <input type="file" id="paytmInvoices" name="invoices" multiple accept=".xls,.xlsx,.csv" hidden>
+              </div>
+              <div id="paytmFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+            </div>
+
+            <div class="submit-container">
+              <button type="submit" class="luxury-submit" id="paytmSubmitBtn">EXECUTE RECONCILIATION</button>
+            </div>
+          </form>
+
+          <div id="paytmResult" class="luxury-result">
+            <h3>RECONCILIATION COMPLETE</h3>
+            <a id="paytmDownloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -381,15 +468,38 @@
     });
 
     // --- TAB SWITCHING ---
-    function switchTab(tab) {
-      document.querySelectorAll('.section').forEach(sec => sec.classList.remove('active'));
+    function switchTab(tabId) {
       document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+      document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+      document.getElementById(`${tabId}-section`).classList.add('active');
+    }
 
-      const targetSec = document.getElementById(`${tab}-section`);
-      const targetBtn = document.querySelector(`[data-tab="${tab}"]`);
+    function setReconMode(mode) {
+      document.getElementById('recon_mode').value = mode;
+      const weeklyBtn = document.getElementById('zomato-weekly-btn');
+      const consolidatedBtn = document.getElementById('zomato-consolidated-btn');
+      const weekContainer = document.getElementById('week-ranges-container');
+      const dropZoneHint = document.querySelector('#dropZone .drop-zone-hint');
+      const dropZoneTitle = document.querySelector('#dropZone .drop-zone-title');
+      const invoicesInput = document.getElementById('invoices');
 
-      if (targetSec) targetSec.classList.add('active');
-      if (targetBtn) targetBtn.classList.add('active');
+      // Both modes now require week ranges for processing
+      weekContainer.style.display = 'block';
+
+      if (mode === 'weekly') {
+        weeklyBtn.classList.add('active');
+        consolidatedBtn.classList.remove('active');
+        dropZoneTitle.textContent = 'Drop Weekly Files';
+        dropZoneHint.textContent = 'Support for multiple weekly invoices';
+        invoicesInput.multiple = true;
+      } else {
+        weeklyBtn.classList.remove('active');
+        consolidatedBtn.classList.add('active');
+        dropZoneTitle.textContent = 'Drop Consolidated File';
+        dropZoneHint.textContent = 'Upload single consolidated monthly file';
+        invoicesInput.multiple = false;
+      }
     }
 
     // --- FILE UPLOAD HELPERS ---
@@ -439,6 +549,7 @@
     setupFileUpload('bankDropZone', 'bankFileInput', 'bankFileList');
     setupFileUpload('dineoutDropZone', 'dineoutInvoices', 'dineoutFileList');
     setupFileUpload('zpayDropZone', 'zpayInvoices', 'zpayFileList');
+    setupFileUpload('paytmDropZone', 'paytmInvoices', 'paytmFileList');
 
     // --- DATE PICKER SETUP ---
     function setupDatePicker(displayId, startId, endId) {
@@ -467,6 +578,8 @@
     setupDatePicker('swiggyLastWeekDisplay', 'swiggyLastWeekStart', 'swiggyLastWeekEnd');
     setupDatePicker('zpayFirstWeekDisplay', 'zpayFirstWeekStart', 'zpayFirstWeekEnd');
     setupDatePicker('zpayLastWeekDisplay', 'zpayLastWeekStart', 'zpayLastWeekEnd');
+    setupDatePicker('paytmFirstWeekDisplay', 'paytmFirstWeekStart', 'paytmFirstWeekEnd');
+    setupDatePicker('paytmLastWeekDisplay', 'paytmLastWeekStart', 'paytmLastWeekEnd');
 
     // --- FORM HANDLING ---
     async function handleFormSubmit(e, apiEndpoint, resultId, downloadLinkId) {
@@ -487,10 +600,14 @@
       const progressInterval = setInterval(async () => {
         try {
           const res = await fetch(`/progress/${taskId}`);
-          const data = await res.json();
-          progressBar.style.width = `${data.progress}%`;
-          progressText.textContent = `${data.progress}%`;
-        } catch (err) { }
+          if (res.ok) {
+            const data = await res.json();
+            if (progressBar) progressBar.style.width = `${data.progress}%`;
+            if (progressText) progressText.textContent = `${data.progress}%`;
+          }
+        } catch (err) {
+          console.log("Progress poll error:", err);
+        }
       }, 1000);
 
       try {
@@ -511,7 +628,8 @@
       } catch (err) {
         clearInterval(progressInterval);
         overlay.style.display = 'none';
-        alert('Transmission Failure.');
+        console.error("Submission Error:", err);
+        alert('Transmission Failure: ' + (err.message || "Unknown error"));
       }
     }
 
@@ -519,6 +637,7 @@
     document.getElementById('swiggyUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/swiggy', 'swiggyResult', 'swiggyDownloadLink'));
     document.getElementById('dineoutUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/swiggy-dineout', 'dineoutResult', 'dineoutDownloadLink'));
     document.getElementById('zomatoPayUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/zomato-pay', 'zpayResult', 'zpayDownloadLink'));
+    document.getElementById('paytmUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/paytm', 'paytmResult', 'paytmDownloadLink'));
 
   </script>
 </body>

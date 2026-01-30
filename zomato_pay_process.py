@@ -6,6 +6,17 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import gc
 
+def ordinal(n):
+    """Convert number to ordinal (1→1st, 2→2nd, 3→3rd, etc.)"""
+    try:
+        n = int(n)
+        if 11 <= (n % 100) <= 13:
+            return f"{n}th"
+        suffixes = {1: "st", 2: "nd", 3: "rd"}
+        return f"{n}{suffixes.get(n % 10, 'th')}"
+    except:
+        return str(n)
+
 def get_week_ranges(first_start, first_end, last_start, last_end):
     """Calculates 5 week ranges based on the first and last week input."""
     try:
@@ -39,7 +50,7 @@ def safe_float(v):
 
 def process_zomato_pay(invoice_files, template_path, output_dir, update_progress=None, 
                        client_name="", month="", first_start=None, first_end=None, 
-                       last_start=None, last_end=None):
+                       last_start=None, last_end=None, forced_filename=None):
     """
     Ultra-optimized Zomato Pay reconciliation with refined logic.
     """
@@ -195,6 +206,9 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             if "amount" in h: col_ads_amt = idx
         
         ads_weekly = {i: 0.0 for i in range(len(weeks))}
+        ads_prev_month = 0.0
+        ads_next_month = 0.0
+
         if col_ads_date != -1 and col_ads_amt != -1:
             for idx, row in enumerate(ads_data):
                 date_val = row[col_ads_date]
@@ -208,6 +222,22 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         if len(parts[0]) == 4: day, m_num = int(parts[2]), int(parts[1])
                         else: day, m_num = int(parts[0]), int(parts[1])
                 
+                if day is None: continue
+
+                # Handle Adjustments for Ads
+                if target_month_num:
+                    is_prev = False
+                    is_next = False
+                    if m_num < target_month_num:
+                        if not (target_month_num == 1 and m_num == 12): is_prev = True
+                        else: is_next = True
+                    elif m_num > target_month_num:
+                        if not (target_month_num == 12 and m_num == 1): is_next = True
+                        else: is_prev = True
+                    
+                    if is_prev: ads_prev_month += safe_float(row[col_ads_amt])
+                    if is_next: ads_next_month += safe_float(row[col_ads_amt])
+
                 if day is None or (target_month_num and m_num != target_month_num):
                     continue
                 
@@ -225,9 +255,21 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         # 7. Final Mapping to Zomato Pay (Consolidated)
         if "Zomato Pay" in out_wb.sheetnames:
             ws_final = out_wb["Zomato Pay"]
+            
+            # Month/Client Replacement in B2/A2
+            ws_final["B2"].value = client_name
+            current_a2 = str(ws_final["A2"].value or "")
+            if "month" in current_a2.lower():
+                ws_final["A2"].value = current_a2.replace("Month", month).replace("month", month)
+            
+            # Paste Week Ranges starting at D6
+            for i, (ws, we) in enumerate(weeks):
+                label = f"{ordinal(ws)} to {ordinal(we)}"
+                ws_final.cell(row=6, column=4+i).value = label
+
             # Set Adjustments first
-            ws_final["D23"].value = adj_prev_month
-            ws_final["H24"].value = adj_next_month
+            ws_final["D23"].value = adj_prev_month + ads_prev_month
+            ws_final["H24"].value = adj_next_month + ads_next_month
 
             for r in range(1, ws_final.max_row + 1):
                 label = str(ws_final.cell(row=r, column=3).value or "").strip().lower()
@@ -255,7 +297,7 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         ws_final.cell(row=r, column=4+i).value = -ads_weekly[i]
 
         # Save and Cleanup
-        output_filename = f"Zomato_Pay_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        output_filename = forced_filename if forced_filename else f"Zomato_Pay_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         full_path = os.path.join(output_dir, output_filename)
         out_wb.save(full_path)
         out_wb.close()

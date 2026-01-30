@@ -13,37 +13,46 @@ import tempfile
 # ===================== ZOMATO-SPECIFIC HELPERS =====================
 
 def parse(date_str, dayfirst=True):
-    """Custom date parser - replacement for dateutil.parser.parse"""
-    # Handle integer input (just day number)
+    """Robust date parser avoiding hardcoded year-as-day bugs"""
     if isinstance(date_str, (int, float)):
-        return datetime(2025, 1, int(date_str))
+        # Default to current year/month if only a day is provided
+        return datetime(datetime.now().year, datetime.now().month, min(max(1, int(date_str)), 28))
 
     date_str = str(date_str).strip()
+    if not date_str or date_str == '#REF!':
+        raise ValueError("Empty date string")
 
-    # Handle simple day number string "27", "2", etc.
     if date_str.isdigit():
-        return datetime(2025, 1, int(date_str))
+        d = int(date_str)
+        return datetime(2025, 1, min(max(1, d), 31))
 
     # Try common date formats
     formats = [
-        "%d/%m/%Y",
-        "%d-%m-%Y",
-        "%Y-%m-%d",
-        "%d %B %Y",
-        "%d %b %Y",
-        "%d.%m.%Y"
+        "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d",
+        "%d %B %Y", "%d %b %Y", "%d.%m.%Y",
+        "%Y/%m/%d", "%d %B", "%d %b"
     ]
 
     for fmt in formats:
         try:
-            return datetime.strptime(date_str, fmt)
+            dt = datetime.strptime(date_str, fmt)
+            if dt.year == 1900: # Year missing in format
+                dt = dt.replace(year=datetime.now().year)
+            return dt
         except:
             continue
 
-    # Last resort - extract first number
-    match = re.search(r'\d+', date_str)
-    if match:
-        return datetime(2025, 1, int(match.group()))
+    # Fallback: Extract day, month, year manually if possible
+    try:
+        numbers = re.findall(r'\d+', date_str)
+        if len(numbers) >= 3:
+            # Try to guess YMD or DMY
+            if len(numbers[0]) == 4: # YYYY-MM-DD
+                return datetime(int(numbers[0]), int(numbers[1]), int(numbers[2]))
+            else: # DD-MM-YYYY
+                return datetime(int(numbers[2]), int(numbers[0]), int(numbers[1]))
+    except:
+        pass
 
     raise ValueError(f"Cannot parse date: {date_str}")
 
@@ -95,11 +104,18 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
         last_end_month = month_num
         last_end_year = year
 
-    # Create datetime objects
-    first_start = datetime(first_start_year, first_start_month, first_start_day)
-    first_end = datetime(first_end_year, first_end_month, first_end_day)
-    last_start = datetime(last_start_year, last_start_month, last_start_day)
-    last_end = datetime(last_end_year, last_end_month, last_end_day)
+    # Create datetime objects with safety caps
+    def safe_date(y, m, d):
+        max_days = calendar.monthrange(y, m)[1]
+        return datetime(y, m, min(max(1, d), max_days))
+
+    try:
+        first_start = safe_date(first_start_year, first_start_month, first_start_day)
+        first_end = safe_date(first_end_year, first_end_month, first_end_day)
+        last_start = safe_date(last_start_year, last_start_month, last_start_day)
+        last_end = safe_date(last_end_year, last_end_month, last_end_day)
+    except ValueError as e:
+        raise ValueError(f"Invalid date in week structure: {e}")
 
     weeks = []
 
@@ -169,28 +185,23 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
         print(f"\n🔍 Parsing invoice: {invoice_filename}")
         print(f"   Parts: {parts}")
 
-        start_day = None
-        start_month = None
-        end_day = None
-        end_month = None
-        year = datetime.now().year
+        start_day, start_month, start_year = None, None, datetime.now().year
+        end_day, end_month, end_year = None, None, datetime.now().year
 
         # Find first date (start)
         for i in range(len(parts) - 1):
             if parts[i].isdigit() and len(parts[i]) <= 2:
-                # Check if next part is a month
                 if i + 1 < len(parts) and parts[i + 1][:3].capitalize() in [
                     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
                 ]:
                     start_day = int(parts[i])
                     start_month = parts[i + 1][:3].capitalize()
-
-                    # Look for year after this
                     if i + 2 < len(parts) and parts[i + 2].isdigit() and len(parts[i + 2]) == 4:
-                        year = int(parts[i + 2])
+                        start_year = int(parts[i + 2])
+                        end_year = start_year # Default until found otherwise
 
-                    # Now find end date (continue from current position)
+                    # Now find end date
                     for j in range(i + 2, len(parts) - 1):
                         if parts[j].isdigit() and len(parts[j]) <= 2:
                             if j + 1 < len(parts) and parts[j + 1][:3].capitalize() in [
@@ -199,10 +210,8 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
                             ]:
                                 end_day = int(parts[j])
                                 end_month = parts[j + 1][:3].capitalize()
-
-                                # Check for year after end date
                                 if j + 2 < len(parts) and parts[j + 2].isdigit() and len(parts[j + 2]) == 4:
-                                    year = int(parts[j + 2])
+                                    end_year = int(parts[j + 2])
                                 break
                     break
 
@@ -210,23 +219,20 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
             print(f"   ❌ Could not parse dates from filename")
             return None
 
-        print(f"   ✅ Parsed: {start_day} {start_month} to {end_day} {end_month} {year}")
-
         # Convert month names to numbers
         month_map = {
             'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
             'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
         }
-
         start_month_num = month_map[start_month]
         end_month_num = month_map[end_month]
 
-        # Create datetime objects
         try:
-           invoice_start = datetime(year, start_month_num, start_day)
-           invoice_end = datetime(year, end_month_num, end_day)
+           invoice_start = datetime(start_year, start_month_num, start_day)
+           invoice_end = datetime(end_year, end_month_num, end_day)
+           print(f"   ✅ Parsed: {invoice_start.date()} to {invoice_end.date()}")
         except ValueError:
-           print(f"   ❌ Invalid date with year {year}")
+           print(f"   ❌ Invalid date range in filename")
            return None
 
     except Exception as e:
@@ -237,10 +243,28 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
 
     # Match to week structure
     for week in week_structure:
+        # 1. Exact Match
         if (week['start_date'].date() == invoice_start.date() and
                 week['end_date'].date() == invoice_end.date()):
-            print(f"   ✅ MATCHED to Week {week['week_num']}")
+            print(f"   ✅ MATCHED (Exact) to Week {week['week_num']}")
             return week['week_num']
+        
+        # 2. End-Date Match (Handles Spillover Start)
+        # If invoice ends on the same day as the week, it's likely the right one
+        # especially for Week 1 where the week starts at 1st but invoice starts earlier
+        if week['end_date'].date() == invoice_end.date():
+             print(f"   ✅ MATCHED (End Date) to Week {week['week_num']}")
+             return week['week_num']
+
+        # 3. Overlap Check (Fallback)
+        # If the invoice covers the majority of the week
+        overlap_start = max(week['start_date'], invoice_start)
+        overlap_end = min(week['end_date'], invoice_end)
+        if overlap_start < overlap_end:
+            overlap_days = (overlap_end - overlap_start).days + 1
+            if overlap_days >= 3: # Major overlap
+                print(f"   ✅ MATCHED (Overlap) to Week {week['week_num']}")
+                return week['week_num']
 
     print(f"   ⚠️ No matching week found")
     return None
@@ -419,14 +443,14 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     payout_col = None
 
     for col_num in range(1, src.max_column + 1):
-        header = str(src.cell(row=start_row, column=col_num).value or "").strip()
-        if header.lower() == "order date":
+        header = str(src.cell(row=start_row, column=col_num).value or "").strip().lower()
+        if header == "order date":
             order_date_col = col_num
-        if "order level payout" in header.lower():
+        if "payout" in header and "date" not in header:
             payout_col = col_num
 
     if not order_date_col or not target_month:
-        print(f"  ⚠️  No spillover filtering - copying all data")
+        print(f"  ⚠️  Order Date or Target Month missing - copying all data")
         max_row, max_col = src.max_row, src.max_column
         tgt.delete_rows(1, tgt.max_row)
         for r in range(start_row, max_row + 1):
@@ -458,23 +482,14 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     print(f"  🔄 Scanning data rows {data_start_row} to {src.max_row}...")
 
     for row_values in src.iter_rows(min_row=data_start_row, values_only=True):
-        # row_values is a tuple 0-indexed. column 1 is index 0.
         try:
             date_value = row_values[order_date_col - 1]
-        except IndexError:
+            if not date_value or date_value == '#REF!': continue
+            row_date = parse(date_value)
+            row_month_num = row_date.month
+            row_year = row_date.year
+        except:
             continue
-
-        row_month_num = None
-
-        if isinstance(date_value, datetime):
-            row_month_num = date_value.month
-        elif isinstance(date_value, str):
-            date_str = date_value.strip()
-            if date_str == '#REF!' or not date_str:
-                continue
-            date_match = re.match(r'(\d{4})-(\d{2})-(\d{2})', date_str)
-            if date_match:
-                row_month_num = int(date_match.group(2))
 
         if not row_month_num:
             continue
@@ -489,10 +504,23 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
             if not isinstance(payout_value, (int, float)):
                 payout_value = 0
 
-        if row_month_num < target_month_num:
+        # Determine correct spillover type (handling Dec->Jan transition)
+        is_opening = False
+        is_closing = False
+
+        target_year = week_info['start_date'].year if week_info else datetime.now().year
+
+        if row_month_num == target_month_num and row_year == target_year:
+            pass # Current month
+        elif (row_year < target_year) or (row_year == target_year and row_month_num < target_month_num):
+            is_opening = True
+        elif (row_year > target_year) or (row_year == target_year and row_month_num > target_month_num):
+            is_closing = True
+
+        if is_opening:
             opening_spillover_sum += payout_value
             opening_rows += 1
-        elif row_month_num > target_month_num:
+        elif is_closing:
             closing_spillover_sum += payout_value
             closing_rows += 1
         else:
@@ -720,7 +748,9 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
     if week_type == "opening_adj":
         week_col = 2
     elif week_type == "closing_adj":
-        week_col = 100
+        week_col = 8  # Use column H (8) for closing adjustments
+    elif week == 5:
+        week_col = 7  # Week 5 goes to column G (7)
     else:
         week_col = 3 + (week - 1)
 
@@ -1072,6 +1102,8 @@ def process_zomato_recon(
                     'week_num': week['week_num'],
                     'invoice_fp': invoice_fp,
                     'week_label': week['label'],
+                    'start_date': week['start_date'],
+                    'end_date': week['end_date'],
                     'is_spillover_start': week['is_spillover_start'],
                     'is_spillover_end': week['is_spillover_end']
                 })
@@ -1082,6 +1114,8 @@ def process_zomato_recon(
                     'week_num': week['week_num'],
                     'invoice_fp': None,
                     'week_label': week['label'],
+                    'start_date': week['start_date'],
+                    'end_date': week['end_date'],
                     'is_spillover_start': week['is_spillover_start'],
                     'is_spillover_end': week['is_spillover_end']
                 })
@@ -1254,23 +1288,15 @@ def process_zomato_recon(
         if opening_spillover_value != 0:
             print(f"\n📍 Mapping opening spillover: {opening_spillover_value}")
             cashflow = recon["Cashflow"]
-            for row in range(1, cashflow.max_row + 1):
-                label = str(cashflow.cell(row=row, column=2).value or "").strip()
-                if label == "Opening Week Adjustments":
-                    cashflow.cell(row=row, column=3).value = opening_spillover_value
-                    print(f"  ✅ Mapped opening spillover to row {row}")
-                    break
+            cashflow["C33"].value = opening_spillover_value
+            print(f"  ✅ Mapped opening spillover to C33")
 
         if closing_spillover_value != 0 and closing_week_num > 0:
             print(f"\n📍 Mapping closing spillover: {closing_spillover_value}")
             cashflow = recon["Cashflow"]
             week_col = 3 + (closing_week_num - 1)
-            for row in range(1, cashflow.max_row + 1):
-                label = str(cashflow.cell(row=row, column=2).value or "").strip()
-                if label == "Closing Week Adjustments":
-                    cashflow.cell(row=row, column=week_col).value = closing_spillover_value
-                    print(f"  ✅ Mapped closing spillover to row {row}, col {week_col}")
-                    break
+            cashflow.cell(row=35, column=week_col).value = closing_spillover_value
+            print(f"  ✅ Mapped closing spillover to row 35, col {week_col}")
 
         replace_month_in_sheets(recon, month)
 

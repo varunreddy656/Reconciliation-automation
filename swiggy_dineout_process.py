@@ -199,6 +199,11 @@ def consolidate_swiggy_dineout(out_wb, sd_data_map, client_name="", month_name="
     if client_name:
         ws_con['A1'] = client_name
         
+    # Month Replacement in A2
+    current_a2 = str(ws_con['A2'].value or "")
+    if "month" in current_a2.lower():
+        ws_con['A2'].value = current_a2.replace("Month", month_name).replace("month", month_name)
+
     if month_name:
         # Search and replace "November" in the whole sheet (common placeholder)
         for row in ws_con.iter_rows():
@@ -251,7 +256,7 @@ def consolidate_swiggy_dineout(out_wb, sd_data_map, client_name="", month_name="
         except Exception as e:
             print(f"⚠️ Error mapping {sd_key}: {e}")
 
-def process_swiggy_dineout(invoice_files, template_path, output_dir, update_progress=None, client_name="", month=""):
+def process_swiggy_dineout(invoice_files, template_path, output_dir, update_progress=None, client_name="", month="", forced_filename=None):
     """
     Final optimized processing logic.
     """
@@ -351,7 +356,7 @@ def process_swiggy_dineout(invoice_files, template_path, output_dir, update_prog
 
         consolidate_swiggy_dineout(out_wb, consolidation_map, client_name=client_name, month_name=month)
 
-        output_filename = f"Swiggy_Dineout_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        output_filename = forced_filename if forced_filename else f"Swiggy_Dineout_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         full_path = os.path.join(output_dir, output_filename)
         out_wb.save(full_path)
         out_wb.close()
@@ -364,7 +369,8 @@ def process_swiggy_dineout(invoice_files, template_path, output_dir, update_prog
         return output_filename, None
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        return None, str(e)
+        tb = traceback.format_exc()
+        print(f"❌ Critical Error in Swiggy Dineout: {tb}")
+        return None, f"Processing Error: {str(e)}"
 
 

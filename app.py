@@ -19,6 +19,8 @@ from process_invoices import process_zomato_recon
 from swiggy_process import process_invoices_web
 import swiggy_dineout_process
 import zomato_pay_process
+from zomato_consolidated_process import process_zomato_consolidated
+import paytm_process
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
@@ -28,6 +30,7 @@ app.config['TEMPLATE_FILE'] = 'template.xlsx'  # ✅ Fixed Zomato template path
 app.config['SWIGGY_TEMPLATE_FILE'] = 'template_files/recon_template.xlsx' # Swiggy template path
 app.config['SWIGGY_DINEOUT_TEMPLATE'] = 'template_files/dineout_template.xlsx' # New Template
 app.config['ZOMATO_PAY_TEMPLATE'] = 'template_files/zpay_template.xlsx' # Zomato Pay Template
+app.config['PAYTM_TEMPLATE'] = 'template_files/paytm_template.xlsx' # Paytm Template
 
 # Create folders if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -39,6 +42,23 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def get_formatted_filename(client_name, recon_type, month_name):
+    """Format filename as 'Client - Recon Type Summary - Mon'YY.xlsx'"""
+    client = str(client_name or "Unknown").strip()
+    
+    # Shorten month (e.g., January -> Jan)
+    try:
+        month_dt = datetime.strptime(month_name.strip().capitalize(), "%B")
+        mon = month_dt.strftime("%b")
+    except:
+        mon = month_name[:3].capitalize()
+    
+    # Get current year last 2 digits
+    year_short = datetime.now().strftime("%y")
+    
+    return f"{client} - {recon_type} Summary - {mon}'{year_short}.xlsx"
 
 
 def cleanup_folder_delayed(folder_path, delay=3):
@@ -101,13 +121,16 @@ def upload_swiggy_dineout():
         # Define progress callback
         p_func = lambda p: update_progress(task_id, p)
         
+        output_filename = get_formatted_filename(client_name, "Swiggy Dineout", month)
+        
         output_file, error = swiggy_dineout_process.process_swiggy_dineout(
             invoice_files,
             app.config['SWIGGY_DINEOUT_TEMPLATE'],
             app.config['OUTPUT_FOLDER'],
             p_func,
             client_name=client_name,
-            month=month
+            month=month,
+            forced_filename=output_filename # Pass filename
         )
         
         if error:
@@ -148,6 +171,8 @@ def upload_zomato_pay():
         # Define progress callback
         p_func = lambda p: update_progress(task_id, p)
         
+        output_filename = get_formatted_filename(client_name, "Zomato Pay", month)
+
         output_file, error = zomato_pay_process.process_zomato_pay(
             invoice_files,
             app.config['ZOMATO_PAY_TEMPLATE'],
@@ -158,7 +183,8 @@ def upload_zomato_pay():
             first_start=f_start,
             first_end=f_end,
             last_start=l_start,
-            last_end=l_end
+            last_end=l_end,
+            forced_filename=output_filename # Pass filename
         )
         
         if error:
@@ -200,15 +226,16 @@ def upload_files():
         # Get form data
         month = request.form.get('month', 'October')
         client_name = request.form.get('client_name', '').strip() or None
+        recon_mode = request.form.get('recon_mode', 'weekly')
 
-        # ✅ GET WEEK DATE RANGES
+        # ✅ GET WEEK DATE RANGES (Only for weekly)
         first_week_start = request.form.get('first_week_start')
         first_week_end = request.form.get('first_week_end')
         last_week_start = request.form.get('last_week_start')
         last_week_end = request.form.get('last_week_end')
 
-        # ✅ VALIDATE WEEK DATES
-        if not all([first_week_start, first_week_end, last_week_start, last_week_end]):
+        # ✅ VALIDATE WEEK DATES (If weekly)
+        if recon_mode == 'weekly' and not all([first_week_start, first_week_end, last_week_start, last_week_end]):
             if session_folder and os.path.exists(session_folder):
                 shutil.rmtree(session_folder)
             return jsonify({
@@ -239,27 +266,46 @@ def upload_files():
             return jsonify({'success': False, 'message': 'No valid invoice files uploaded'})
 
         # Generate output path
-        output_filename = f"Zomato_Recon_{month}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        output_filename = get_formatted_filename(client_name, "Zomato", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
 
         # Get Task ID for progress tracking
         task_id = request.form.get('task_id')
         if task_id:
             TASK_PROGRESS[task_id] = 5 # Initial progress
-
-        # ✅ Process reconciliation using FIXED template
-        result = process_zomato_recon(
-            invoice_folder_path=invoice_folder,
-            template_recon_path=app.config['TEMPLATE_FILE'],
-            output_path=output_path,
-            client_name=client_name,
-            month=month,
-            first_week_start=first_week_start,
-            first_week_end=first_week_end,
-            last_week_start=last_week_start,
-            last_week_end=last_week_end,
-            progress_callback=lambda p: update_progress(task_id, p)
-        )
+          # Run processing in background if many files, or synchronous if simple
+        try:
+            p_func = lambda p: update_progress(task_id, p)
+            
+            if recon_mode == 'consolidated':
+                result = process_zomato_consolidated(
+                    invoice_folder,
+                    app.config['TEMPLATE_FILE'],
+                    output_path,
+                    client_name=client_name,
+                    month=month,
+                    first_week_start=first_week_start,
+                    first_week_end=first_week_end,
+                    last_week_start=last_week_start,
+                    last_week_end=last_week_end,
+                    progress_callback=p_func
+                )
+            else: # Default to weekly or other modes handled by process_zomato_recon
+                result = process_zomato_recon(
+                    invoice_folder,
+                    app.config['TEMPLATE_FILE'],
+                    output_path,
+                    client_name=client_name,
+                    month=month,
+                    first_week_start=first_week_start,
+                    first_week_end=first_week_end,
+                    last_week_start=last_week_start,
+                    last_week_end=last_week_end,
+                    progress_callback=p_func
+                )
+        except Exception as e:
+            # Re-raise or handle specific processing errors
+            raise e
 
 
         # ✅ Force garbage collection to release file handles
@@ -366,7 +412,7 @@ def upload_swiggy_files():
                 shutil.rmtree(session_folder)
                 return jsonify({'success': False, 'message': 'Invalid bank file format'})
 
-        output_filename = f"Swiggy_Recon_{month}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        output_filename = get_formatted_filename(client_name, "Swiggy", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
 
         # Get Task ID for progress tracking
@@ -414,6 +460,81 @@ def upload_swiggy_files():
             'success': False,
             'message': f'Error: {str(e)}'
         })
+
+
+
+@app.route('/upload/paytm', methods=['POST'])
+def upload_paytm():
+    """Handle Paytm file upload and processing"""
+    session_folder = None
+    try:
+        if not os.path.exists(app.config['PAYTM_TEMPLATE']):
+            return jsonify({'success': False, 'message': 'Paytm template file not found!'})
+
+        if 'invoices' not in request.files:
+            return jsonify({'success': False, 'message': 'No file uploaded'})
+
+        invoice_files = request.files.getlist('invoices')
+        if not invoice_files or invoice_files[0].filename == '':
+            return jsonify({'success': False, 'message': 'No file selected'})
+
+        client_name = request.form.get('clientName', 'Client').strip()
+        month = request.form.get('month', 'October')
+
+        # Get week ranges
+        first_week_start = request.form.get('firstWeekStart')
+        first_week_end = request.form.get('firstWeekEnd')
+        last_week_start = request.form.get('lastWeekStart')
+        last_week_end = request.form.get('lastWeekEnd')
+
+        session_id = str(uuid.uuid4())[:8]
+        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
+        os.makedirs(session_folder, exist_ok=True)
+
+        # Save the first file (Paytm is expected as single file)
+        file = invoice_files[0]
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(session_folder, filename)
+        file.save(filepath)
+
+        output_filename = get_formatted_filename(client_name, "Paytm", month)
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+
+        task_id = request.form.get('task_id')
+        p_func = lambda p: update_progress(task_id, p)
+        if task_id: update_progress(task_id, 10)
+
+        result = paytm_process.process_paytm(
+            filepath,
+            app.config['PAYTM_TEMPLATE'],
+            output_path,
+            client_name=client_name,
+            month=month,
+            first_week_start=first_week_start,
+            first_week_end=first_week_end,
+            last_week_start=last_week_start,
+            last_week_end=last_week_end,
+            progress_callback=p_func
+        )
+
+        if session_folder and os.path.exists(session_folder):
+            cleanup_folder_delayed(session_folder, delay=2)
+
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Paytm Reconciliation Complete',
+                'download_url': f"/download/{output_filename}"
+            })
+        else:
+            return jsonify({'success': False, 'message': result.get('message', 'Processing failed')})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if session_folder and os.path.exists(session_folder):
+            cleanup_folder_delayed(session_folder, delay=2)
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
 
 
 @app.route('/download/<filename>')

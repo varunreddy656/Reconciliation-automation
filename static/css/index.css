@@ -12,6 +12,36 @@
     --transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* --- TOGGLE SWITCH --- */
+.recon-type-toggle {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    border: 1px solid var(--border-glass);
+    width: fit-content;
+}
+
+.toggle-btn {
+    padding: 10px 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: var(--transition);
+    letter-spacing: 0.1em;
+}
+
+.toggle-btn.active {
+    background: var(--accent);
+    color: #000;
+}
+
 * {
     margin: 0;
     padding: 0;
