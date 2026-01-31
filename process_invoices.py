@@ -1200,7 +1200,7 @@ def process_zomato_recon(
 
             print(f"\n--- Processing {fp.name} → Week {week_num} ---")
 
-            wb_invoice = openpyxl.load_workbook(fp, data_only=True)
+            wb_invoice = openpyxl.load_workbook(fp, data_only=True, read_only=True)
 
             try:
                 possible_order_sheets = [

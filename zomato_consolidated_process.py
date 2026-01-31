@@ -130,7 +130,7 @@ def process_zomato_consolidated(
         
         consolidated_fp = files[0]
         print(f"📊 Processing Consolidated File: {consolidated_fp.name}")
-        wb_source = openpyxl.load_workbook(consolidated_fp, data_only=True)
+        wb_source = openpyxl.load_workbook(consolidated_fp, data_only=True, read_only=True)
         
         # Find Order level sheet
         possible_order_sheets = ["Order Level", "Order level", "Order Details", "Orders"]

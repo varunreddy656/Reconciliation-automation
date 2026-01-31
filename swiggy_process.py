@@ -596,7 +596,7 @@ def process_invoices_web(
             print(f"\nProcessing {fp} → Week {week}")
             
             # OPTIMIZATION: Open workbook ONCE
-            wb_invoice = openpyxl.load_workbook(fp, data_only=True)
+            wb_invoice = openpyxl.load_workbook(fp, data_only=True, read_only=True)
             
             # Extract Expected Receipt from Summary sheet directly
             expected_receipt = None
@@ -662,7 +662,7 @@ def process_invoices_web(
         bank_wb = None
         try:
             if bank_file_path:
-                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False)
+                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False, read_only=True)
                 copy_bank_sheet_to_recon(bank_wb, recon)
                 print("Bank sheet imported into reconciliation file.")
                 map_bank_to_actual_receipts_from_invoice_summary(recon, week_expected_map, tolerance=10)
