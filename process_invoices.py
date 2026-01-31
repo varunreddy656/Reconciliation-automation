@@ -1,5 +1,6 @@
 from openpyxl import load_workbook
 import openpyxl
+from openpyxl.utils import get_column_letter
 from pathlib import Path
 import re
 import shutil
@@ -854,40 +855,83 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
 
     print(f"\n🔍 D2W MAPPING - Scanning sheet '{d2_sheet.title}'...")
 
+    # Find D1W sheet if it exists
+    d1_sheet = None
+    d1_sheet_name = d2_sheet.title.replace("D2W", "D1W")
+    if d1_sheet_name in wb.sheetnames:
+        d1_sheet = wb[d1_sheet_name]
+
     for cashflow_label, (search_terms, search_col, value_col) in D2W_MAPPING.items():
         print(f"\n📊 Looking for '{cashflow_label}'...")
 
         found_row = None
         found_value = None
+        
+        # Logic for High Priority: Deductions - Additions + Order Level Ads
+        addition_row = None
+        extra_ads_formula_part = ""
+        
+        if cashflow_label == "High Priority":
+            # 1. Look for Total Additions to deduct
+            print("  🔍 Checking D2W for 'Total Additions'...")
+            for row in range(1, d2_sheet.max_row + 1):
+                label = str(d2_sheet[f"{search_col}{row}"].value or "").strip().lower()
+                if label == "total additions":
+                    addition_row = row
+                    print(f"  ✅ Found 'Total Additions' at row {row}")
+                    break
+            
+            # 2. Look for Extra Inventory Ads from D1W
+            if d1_sheet:
+                print("  🔍 Checking D1W for 'Extra inventory ads (order level deduction)'...")
+                for col_idx in range(1, d1_sheet.max_column + 1):
+                    h = str(d1_sheet.cell(row=5, column=col_idx).value or "").strip().lower()
+                    if "extra inventory ads (order level deduction)" in h:
+                        val = d1_sheet.cell(row=4, column=col_idx).value
+                        if isinstance(val, (int, float)):
+                            col_letter = get_column_letter(col_idx)
+                            extra_ads_formula_part = f" + '{d1_sheet.title}'!{col_letter}4"
+                            print(f"  ✅ Found extra ads at col {col_idx}")
+                        break
 
+        # Main D2W search (existing logic)
         for row in range(1, d2_sheet.max_row + 1):
             cell_value = str(d2_sheet[f"{search_col}{row}"].value or "").strip()
-
             for search_term in search_terms:
                 if cell_value == search_term:
                     found_row = row
                     found_value = d2_sheet[f"{value_col}{row}"].value
                     print(f"  ✅ Found '{search_term}' at row {row}")
-                    print(f"  📍 Value in column {value_col}{row}: {found_value}")
                     break
+            if found_row: break
 
-            if found_row:
-                break
+        # Mapping Logic
+        if any([found_row, addition_row, extra_ads_formula_part]):
+            for cf_row in range(1, cashflow.max_row + 1):
+                label = str(cashflow.cell(row=cf_row, column=2).value or "").strip()
+                if label == cashflow_label:
+                    formula = "="
+                    parts = []
+                    if found_row:
+                        parts.append(f"'{d2_sheet.title}'!{value_col}{found_row}")
+                    
+                    if addition_row:
+                        # Deduct total additions
+                        parts.append(f"-'{d2_sheet.title}'!{value_col}{addition_row}")
+                    
+                    formula += "".join(parts)
+                    if extra_ads_formula_part:
+                        formula += extra_ads_formula_part
+                    
+                    # Clean up formula starting with =-
+                    if formula.startswith("=-"): formula = "=" + formula[2:]
+                    elif formula == "=": continue # Should not happen
 
-        if not found_value:
-            print(f"  ❌ '{cashflow_label}' - No matching row found in column B")
-            continue
-
-        for cf_row in range(1, cashflow.max_row + 1):
-            cf_label = str(cashflow.cell(row=cf_row, column=2).value or "").strip()
-
-            if cf_label == cashflow_label:
-                formula = f"='{d2_sheet.title}'!{value_col}{found_row}"
-                cashflow.cell(row=cf_row, column=week_col).value = formula
-                print(f"  ✅ Mapped to Cashflow row {cf_row}, col {week_col}: {formula}")
-                break
+                    cashflow.cell(row=cf_row, column=week_col).value = formula
+                    print(f"  ✅ Mapped {cashflow_label} for Week {week}: {formula}")
+                    break
         else:
-            print(f"  ⚠️  Cashflow label '{cashflow_label}' not found in Cashflow sheet")
+            print(f"  ❌ '{cashflow_label}' - No data found in D2W or D1W")
 
 
 def map_commissionable_value_to_summary(summary_sheet, d1_sheet, week_num):
@@ -1255,15 +1299,13 @@ def process_zomato_recon(
                     # ✅ VERIFY THE COPY
                     verify_row_1 = [d2.cell(row=1, column=c).value for c in range(1, min(5, max_col + 1))]
                     print(f"  🔍 Verification - First 4 cells of row 1: {verify_row_1}")
-
-                    # Map D2W values to Cashflow
-                    print(f"  🔗 Mapping D2W{week_num} to Cashflow...")
-                    map_d2w_values_to_cashflow(recon, d2, week_num)
-
                 else:
-                    print(f"  ❌ No D2W sheet found!")
-                    print(f"  💡 Available sheets were: {wb_invoice.sheetnames}")
-                    print(f"  💡 Searched for: {possible_d2_sheets}")
+                    print(f"  ⚠️  No D2W source sheet found for Week {week_num}, creating empty D2W{week_num} for mapping")
+                    d2 = ensure_sheet(recon, f"D2W{week_num}")
+
+                # Map D2W values to Cashflow (always call this to check D1W as well)
+                print(f"  🔗 Mapping week-wise deductions (D2W/D1W) to Cashflow...")
+                map_d2w_values_to_cashflow(recon, d2, week_num)
 
             finally:
                 wb_invoice.close()

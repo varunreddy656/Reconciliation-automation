@@ -251,19 +251,19 @@ def upload_files():
         last_week_start = request.form.get('last_week_start')
         last_week_end = request.form.get('last_week_end')
 
+        # Create unique session folder
+        session_id = str(uuid.uuid4())[:8]
+        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
+        os.makedirs(session_folder, exist_ok=True)
+
         # ✅ VALIDATE WEEK DATES (If weekly)
         if recon_mode == 'weekly' and not all([first_week_start, first_week_end, last_week_start, last_week_end]):
-            if session_folder and os.path.exists(session_folder):
+            if os.path.exists(session_folder):
                 shutil.rmtree(session_folder)
             return jsonify({
                 'success': False,
                 'message': 'All week date fields are required (First Week Start, First Week End, Last Week Start, Last Week End)'
             })
-
-        # Create unique session folder
-        session_id = str(uuid.uuid4())[:8]
-        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
-        os.makedirs(session_folder, exist_ok=True)
 
         # Save invoice files
         invoice_folder = os.path.join(session_folder, 'invoices')
@@ -289,7 +289,7 @@ def upload_files():
         # Get Task ID for progress tracking
         task_id = request.form.get('task_id')
         if task_id:
-            TASK_PROGRESS[task_id] = 5 # Initial progress
+            update_progress(task_id, 5) # Initial progress
           # Run processing in background if many files, or synchronous if simple
         try:
             p_func = lambda p: update_progress(task_id, p)
@@ -321,8 +321,14 @@ def upload_files():
                     progress_callback=p_func
                 )
         except Exception as e:
-            # Re-raise or handle specific processing errors
-            raise e
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"❌ Processing Error:\n{error_details}")
+            return jsonify({
+                'success': False,
+                'message': f"Processing Error: {str(e)}",
+                'traceback': error_details
+            }), 500
 
 
         # ✅ Force garbage collection to release file handles
@@ -348,15 +354,22 @@ def upload_files():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
+        error_details = traceback.format_exc()
+        print(f"❌ Submission Error:\n{error_details}")
 
         # Cleanup on error
-        if session_folder and os.path.exists(session_folder):
-            try:
+        try:
+            if 'session_folder' in locals() and session_folder and os.path.exists(session_folder):
                 time.sleep(1)
                 shutil.rmtree(session_folder)
-            except:
-                cleanup_folder_delayed(session_folder, delay=2)
+        except:
+            pass
+
+        return jsonify({
+            'success': False,
+            'message': f"Submission Error: {str(e)}",
+            'traceback': error_details
+        }), 500
 
         return jsonify({
             'success': False,
@@ -435,7 +448,7 @@ def upload_swiggy_files():
         # Get Task ID for progress tracking
         task_id = request.form.get('task_id')
         if task_id:
-            TASK_PROGRESS[task_id] = 5 # Initial progress
+            update_progress(task_id, 5) # Initial progress
 
         result = process_invoices_web(
             invoice_folder_path=session_folder,
@@ -470,13 +483,13 @@ def upload_swiggy_files():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        if session_folder and os.path.exists(session_folder):
-             cleanup_folder_delayed(session_folder, delay=2)
+        error_details = traceback.format_exc()
+        print(f"❌ Swiggy Error:\n{error_details}")
         return jsonify({
             'success': False,
-            'message': f'Error: {str(e)}'
-        })
+            'message': f"Submission Error: {str(e)}",
+            'traceback': error_details
+        }), 500
 
 
 
@@ -548,10 +561,13 @@ def upload_paytm():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
-        if session_folder and os.path.exists(session_folder):
-            cleanup_folder_delayed(session_folder, delay=2)
-        return jsonify({'success': False, 'message': f'Error: {str(e)}'})
+        error_details = traceback.format_exc()
+        print(f"❌ Paytm Error:\n{error_details}")
+        return jsonify({
+            'success': False,
+            'message': f"Submission Error: {str(e)}",
+            'traceback': error_details
+        }), 500
 
 
 @app.route('/download/<filename>')
@@ -619,4 +635,4 @@ if __name__ == '__main__':
     else:
         print("✅ Template file found!")
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)

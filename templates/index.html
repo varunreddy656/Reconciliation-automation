@@ -19,11 +19,16 @@
   </div>
 
   <div id="splash-screen">
+    <div class="splash-bg">
+      <div class="splash-orb orb-1"></div>
+      <div class="splash-orb orb-2"></div>
+    </div>
     <div class="splash-content">
-      <div class="splash-logo" style="font-size: 5rem; letter-spacing: 0.15em;">AUTO RECONCILE</div>
-      <div
-        style="color: rgba(255,255,255,0.4); letter-spacing: 0.8em; font-size: 0.9rem; margin-top: 20px; font-weight: 200;">
-        INTELLIGENT SYSTEM</div>
+      <div class="splash-logo">AUTO RECONCILE</div>
+      <div class="splash-author">Varun Reddy</div>
+      <div class="loading-bar-container">
+        <div class="loading-bar-fill"></div>
+      </div>
     </div>
   </div>
 
@@ -450,21 +455,26 @@
     </div>
     <div
       style="margin-top: 30px; font-size: 0.75rem; letter-spacing: 0.5em; color: rgba(255,255,255,0.4); text-transform: uppercase; font-weight: 600;">
-      Processing Intelligence</div>
+      Processing Data</div>
   </div>
 
   <script>
     // --- SPLASH SCREEN LOGIC ---
     window.addEventListener('load', () => {
+      // Ensure the container is ready behind the scenes
+      const container = document.getElementById('app-container');
+      container.style.display = 'flex';
+
       setTimeout(() => {
         const splash = document.getElementById('splash-screen');
-        const container = document.getElementById('app-container');
+
+        // Circular exit animation
         splash.style.clipPath = 'circle(0% at 50% 50%)';
+
         setTimeout(() => {
           splash.style.display = 'none';
-          container.classList.add('active');
-        }, 1200);
-      }, 2500);
+        }, 1500);
+      }, 4000);
     });
 
     // --- TAB SWITCHING ---
@@ -612,24 +622,40 @@
 
       try {
         const response = await fetch(apiEndpoint, { method: 'POST', body: formData });
-        const result = await response.json();
+        let result;
+        try {
+          result = await response.json();
+        } catch (jsonErr) {
+          throw new Error("Server returned non-JSON response. It might have crashed.");
+        }
+
         clearInterval(progressInterval);
         overlay.style.display = 'none';
 
-        if (result.success) {
+        if (response.ok && result.success) {
           const resDiv = document.getElementById(resultId);
           const dlLink = document.getElementById(downloadLinkId);
           resDiv.style.display = 'block';
           dlLink.href = `/download/${result.filename || result.download_url.split('/').pop()}`;
           resDiv.scrollIntoView({ behavior: 'smooth' });
         } else {
-          alert('Error: ' + result.message);
+          alert('Error: ' + (result.message || 'Processing failed on server'));
         }
       } catch (err) {
         clearInterval(progressInterval);
         overlay.style.display = 'none';
         console.error("Submission Error:", err);
-        alert('Transmission Failure: ' + (err.message || "Unknown error"));
+
+        // Try to get more info if it's a server error
+        let errorMsg = err.message || "Unknown error";
+        try {
+          // If we can't fetch, maybe the server is down
+          if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+            errorMsg = "Server connection lost. Please check if the local server is running.";
+          }
+        } catch (e) { }
+
+        alert('Transmission Failure: ' + errorMsg);
       }
     }
 

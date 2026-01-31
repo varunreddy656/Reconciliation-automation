@@ -117,31 +117,120 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    transition: clip-path 1.2s cubic-bezier(0.8, 0, 0.2, 1);
+    transition: clip-path 1.5s cubic-bezier(0.77, 0, 0.175, 1);
+    overflow: hidden;
+}
+
+/* Cosmic Orbs for Splash */
+.splash-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.splash-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.5;
+    animation: orbFloat 20s infinite alternate;
+}
+
+.orb-1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(64, 50, 255, 0.3) 0%, transparent 70%);
+    top: -200px;
+    left: -200px;
+}
+
+.orb-2 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255, 0, 128, 0.2) 0%, transparent 70%);
+    bottom: -150px;
+    right: -150px;
+    animation-delay: -5s;
+}
+
+@keyframes orbFloat {
+    from {
+        transform: translate(0, 0) scale(1);
+    }
+
+    to {
+        transform: translate(100px, 50px) scale(1.2);
+    }
 }
 
 .splash-content {
     text-align: center;
+    position: relative;
+    z-index: 1;
 }
 
 .splash-logo {
     font-family: 'Outfit', sans-serif;
-    font-size: 5rem;
+    font-size: 4.5rem;
     font-weight: 900;
-    letter-spacing: -0.05em;
-    background: linear-gradient(to bottom, #fff, #555);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    letter-spacing: 0.3em;
+    color: #ffffff;
     opacity: 0;
-    transform: translateY(30px);
-    animation: splashIn 0.8s forwards 0.5s;
+    filter: blur(10px);
+    transform: scale(1.1);
+    animation: splashIn 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.5s;
 }
 
 @keyframes splashIn {
     to {
         opacity: 1;
-        transform: translateY(0);
+        filter: blur(0);
+        transform: scale(1);
+    }
+}
+
+.loading-bar-container {
+    width: 200px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 40px auto 0;
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    animation: fadeIn 1s forwards 1.5s;
+}
+
+.splash-author {
+    margin-top: 15px;
+    font-size: 0.8rem;
+    letter-spacing: 0.6em;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 300;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: fadeIn 1.5s forwards 2s;
+}
+
+.loading-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, transparent, #fff, transparent);
+    transform: translateX(-100%);
+    animation: loadLine 3s cubic-bezier(0.65, 0, 0.35, 1) forwards 1.8s;
+}
+
+@keyframes loadLine {
+    to {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
     }
 }
 
@@ -149,12 +238,8 @@ body {
 .app-container {
     display: flex;
     height: 100vh;
-    opacity: 0;
-    transition: opacity 1s ease;
-}
-
-.app-container.active {
     opacity: 1;
+    /* Keep at 1 to avoid blank flash during reveal */
 }
 
 /* --- SIDEBAR --- */

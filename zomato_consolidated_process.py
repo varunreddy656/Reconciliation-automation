@@ -199,69 +199,106 @@ def process_zomato_consolidated(
                 break
         
         if src_ads:
-            # Find the starting row of Investments in growth services
-            start_scanning = False
+            # Find the starting row of sections
+            current_section = None
             type_col, period_col, total_col = -1, -1, -1
             
             for row in range(1, src_ads.max_row + 1):
-                row_val = str(src_ads.cell(row=row, column=2).value or "").strip().lower()
+                row_val_b = str(src_ads.cell(row=row, column=2).value or "").strip().lower()
                 
-                if "investments in growth services" in row_val:
-                    start_scanning = True
+                # Check for section headers
+                if "addition type" in row_val_b:
+                    current_section = "ADDITION"
                     continue
-                
-                # Look for header row within the section
-                if start_scanning and type_col == -1:
+                elif "deduction type" in row_val_b:
+                    current_section = "DEDUCTION"
+                    continue
+                elif "investments in hyperpure" in row_val_b or "other deductions" in row_val_b:
+                    current_section = "OTHER"
+                    continue
+
+                # Look for column headers if not found yet
+                if type_col == -1:
                     headers = [str(src_ads.cell(row=row, column=c).value or "").strip().lower() for c in range(1, 15)]
                     for idx, h in enumerate(headers, 1):
                         if "type" == h: type_col = idx
-                        if "deduction time period" in h: period_col = idx
+                        if "deduction time period" in h or "order date" in h: period_col = idx
                         if "total amount" in h: total_col = idx
                     continue
                 
-                # Break if we hit the next section
-                if start_scanning and ("investments in hyperpure" in row_val or "other deductions" in row_val):
-                    break
-                
-                if start_scanning and type_col != -1:
+                # Process ADS rows
+                if current_section in ["ADDITION", "DEDUCTION"] and type_col != -1:
                     type_val = str(src_ads.cell(row=row, column=type_col).value or "").strip().upper()
                     if type_val == "ADS":
-                        period_str = src_ads.cell(row=row, column=period_col).value
+                        period_val = src_ads.cell(row=row, column=period_col).value
                         amount = safe_float(src_ads.cell(row=row, column=total_col).value)
                         
-                        p_start, p_end = parse_deduction_period(period_str)
+                        # Use deduction period if available, else try to find any date in the row
+                        p_start, p_end = parse_deduction_period(period_val)
+                        if not p_start:
+                            # Fallback: maybe it's a simple date
+                            try:
+                                dt = parse(period_val).date()
+                                p_start, p_end = dt, dt
+                            except: pass
+
                         if p_start:
                             # Match to week
                             matched = False
                             for week in week_structure:
                                 ws, we = week['start_date'].date(), week['end_date'].date()
-                                # Check if period overlaps significantly or start date matches
                                 if ws <= p_start <= we or (p_start <= ws and p_end >= we):
-                                    ads_weekly_totals[week['week_num']] += amount
+                                    # DEDUCT if in Addition section, ADD if in Deduction section
+                                    if current_section == "ADDITION":
+                                        ads_weekly_totals[week['week_num']] -= amount
+                                        print(f"  ➖ Deducted Addition Ad: {amount} for Week {week['week_num']}")
+                                    else:
+                                        ads_weekly_totals[week['week_num']] += amount
+                                        print(f"  ➕ Added Deduction Ad: {amount} for Week {week['week_num']}")
                                     matched = True
                                     break
                             if not matched:
-                                print(f"  ⚠️ Could not match Ads period {period_str} to any week")
+                                print(f"  ⚠️ Could not match Ad period '{period_val}' to any week")
             
-            # 6. Map Ads to Cashflow
-            if "Cashflow" in recon.sheetnames:
-                cashflow = recon["Cashflow"]
-                high_priority_row = -1
-                for r in range(1, cashflow.max_row + 1):
-                    label = str(cashflow.cell(row=r, column=2).value or "").strip().lower()
-                    if label == "high priority":
-                        high_priority_row = r
-                        break
-                
-                if high_priority_row != -1:
-                    for week_num, total in ads_weekly_totals.items():
-                        col = 3 + (week_num - 1)
-                        cashflow.cell(row=high_priority_row, column=col).value = total
-                        print(f"  ✅ Week {week_num} Ads: {total} → Cashflow[{high_priority_row}, {col}]")
-                else:
-                    print("  ⚠️ 'High Priority' label not found in Cashflow sheet")
+            
         else:
             print("  ⚠️ 'Addition Deductions Details' sheet not found")
+
+        # 6. Check D1W sheets for Extra inventory ads (always check)
+        print("\n🔍 Checking D1W sheets for 'Extra inventory ads (order level deduction)'...")
+        for week in week_structure:
+            wn = week['week_num']
+            d1_name = f"D1W{wn}"
+            if d1_name in recon.sheetnames:
+                d1_sheet = recon[d1_name]
+                # Search row 5 for header
+                for col_idx in range(1, d1_sheet.max_column + 1):
+                    h = str(d1_sheet.cell(row=5, column=col_idx).value or "").strip().lower()
+                    if "extra inventory ads (order level deduction)" in h:
+                        val = d1_sheet.cell(row=4, column=col_idx).value
+                        if isinstance(val, (int, float)):
+                            ads_weekly_totals[wn] += val
+                            print(f"  ✅ Week {wn} Extra Ads: {val} (Total Ads now: {ads_weekly_totals[wn]})")
+                        break
+
+        # 7. Map Ads to Cashflow
+        if "Cashflow" in recon.sheetnames:
+            cashflow = recon["Cashflow"]
+            high_priority_row = -1
+            for r in range(1, cashflow.max_row + 1):
+                label = str(cashflow.cell(row=r, column=2).value or "").strip().lower()
+                if label == "high priority":
+                    high_priority_row = r
+                    break
+            
+            if high_priority_row != -1:
+                for week_num, total in ads_weekly_totals.items():
+                    col = 3 + (week_num - 1)
+                    # For consolidated, we set the value directly
+                    cashflow.cell(row=high_priority_row, column=col).value = total
+                    print(f"  ✅ Week {week_num} Final Ads: {total} → Cashflow[{high_priority_row}, {col}]")
+            else:
+                print("  ⚠️ 'High Priority' label not found in Cashflow sheet")
 
         # 7. Finalize
         replace_month_in_sheets(recon, month)
