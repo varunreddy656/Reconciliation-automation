@@ -106,20 +106,25 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         if update_progress: update_progress(60)
 
         # 4. Calculation Mapping (Headers sit at Row 15)
-        headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws_calc[15]]
         def find_col(possible_names):
-            for name in possible_names:
-                for idx, h in enumerate(headers):
-                    if name.lower() in h: return idx
+            # Scan rows 14-16 just in case of slight shifts
+            for r in [15, 14, 16]:
+                try:
+                    row_headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws_calc[r]]
+                    for name in possible_names:
+                        for idx, h in enumerate(row_headers):
+                            if name.lower() in h: return idx
+                except:
+                    continue
             return -1
 
-        col_date = find_col(["date and time"])
-        col_bill = find_col(["bill amount"])
-        col_discount = find_col(["instant discount"])
-        col_promo = find_col(["promo share"])
-        col_comm = find_col(["commission amount"])
-        col_tip = find_col(["tips"])
-        col_net = find_col(["net receivable"])
+        col_date = find_col(["date and time", "date", "time", "transaction date"])
+        col_bill = find_col(["bill amount", "order amount", "total bill"])
+        col_discount = find_col(["instant discount", "discount amount", "total discount", "promo share"])
+        col_promo = find_col(["promo share", "restaurant share"])
+        col_comm = find_col(["commission amount", "commission", "zomato commission"])
+        col_tip = find_col(["tips", "tip amount"])
+        col_net = find_col(["net receivable", "payout", "settlement amount"])
 
         if col_date == -1 or col_bill == -1:
             return None, "Required date or bill columns missing in Transactions summary."
