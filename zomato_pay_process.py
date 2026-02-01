@@ -6,6 +6,21 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import gc
 
+def get_safe_dimensions(sheet):
+    """Safe way to get max_row and max_column in read_only mode"""
+    max_r = sheet.max_row
+    max_c = sheet.max_column
+    if max_r is None or max_c is None:
+        if max_c is None:
+            for row in sheet.iter_rows(min_row=1, max_row=10):
+                if len(row) > (max_c or 0):
+                    max_c = len(row)
+        if max_r is None:
+            max_r = 0
+            for row in sheet.iter_rows(values_only=True):
+                max_r += 1
+    return max_r or 0, max_c or 0
+
 def ordinal(n):
     """Convert number to ordinal (1→1st, 2→2nd, 3→3rd, etc.)"""
     try:
@@ -67,8 +82,10 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         ws_ads = out_wb["Zpay Ads"] if "Zpay Ads" in out_wb.sheetnames else out_wb.create_sheet("Zpay Ads")
         
         # Clear existing content
-        ws_calc.delete_rows(1, ws_calc.max_row)
-        ws_ads.delete_rows(1, ws_ads.max_row)
+        mr_calc, _ = get_safe_dimensions(ws_calc)
+        mr_ads, _ = get_safe_dimensions(ws_ads)
+        ws_calc.delete_rows(1, mr_calc or 100)
+        ws_ads.delete_rows(1, mr_ads or 100)
 
         processed_data = [] # Stores Transaction Summary
         ads_data = [] # Stores Ad Summary

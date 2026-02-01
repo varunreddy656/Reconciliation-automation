@@ -7,6 +7,21 @@ import re
 from datetime import datetime
 from process_invoices import calculate_week_structure, ordinal, parse
 
+def get_safe_dimensions(sheet):
+    """Safe way to get max_row and max_column in read_only mode"""
+    max_r = sheet.max_row
+    max_c = sheet.max_column
+    if max_r is None or max_c is None:
+        if max_c is None:
+            for row in sheet.iter_rows(min_row=1, max_row=10):
+                if len(row) > (max_c or 0):
+                    max_c = len(row)
+        if max_r is None:
+            max_r = 0
+            for row in sheet.iter_rows(values_only=True):
+                max_r += 1
+    return max_r or 0, max_c or 0
+
 def safe_float(val):
     if val is None: return 0.0
     try:
@@ -139,7 +154,8 @@ def process_paytm(
         # Sales row (Amt): Row where col B contains "Sales (exclusive of GST)"
         # Commission row: Row where col B contains "Commission (Inclusive of GST)"
         amt_row, comm_row = -1, -1
-        for r in range(1, ws_recon.max_row + 1):
+        max_recon_r, _ = get_safe_dimensions(ws_recon)
+        for r in range(1, max_recon_r + 1):
             lbl = str(ws_recon.cell(row=r, column=2).value or "").lower()
             if "sales (exclusive of gst)" in lbl and "failed" in lbl:
                 amt_row = r
