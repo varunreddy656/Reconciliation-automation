@@ -1,6 +1,28 @@
-from openpyxl import load_workbook
 import openpyxl
 from openpyxl.utils import get_column_letter
+
+def get_safe_dimensions(sheet):
+    """Safe way to get max_row and max_column in read_only mode"""
+    max_r = sheet.max_row
+    max_c = sheet.max_column
+    
+    if max_r is None or max_c is None:
+        # Fallback: scan if missing (expensive but safe)
+        if max_c is None:
+            # Check row 5 or 10 (common header rows)
+            for row in sheet.iter_rows(min_row=1, max_row=10):
+                if len(row) > (max_c or 0):
+                    max_c = len(row)
+        
+        if max_r is None:
+            # This is slow, but we need it if max_row is missing
+            # In most cases for our files it should be there.
+            # If not, we might need a different strategy.
+            max_r = 0
+            for row in sheet.iter_rows(values_only=True):
+                max_r += 1
+                
+    return max_r or 0, max_c or 0
 from pathlib import Path
 import re
 import shutil
@@ -551,7 +573,8 @@ def count_total_orders_from_d1w(d1_sheet, header_row=5):
         # Find the ACTUAL last row with data
         last_data_row = data_start_row
 
-        for row_num in range(data_start_row, d1_sheet.max_row + 1):
+        max_r, _ = get_safe_dimensions(d1_sheet)
+        for row_num in range(data_start_row, max_r + 1):
             # Check first 5 columns for any data
             has_data = False
             for col in range(1, 6):  # Check columns A-E
@@ -591,7 +614,8 @@ def count_nonzero_compensation(sheet, data_row=1):
 
         print(f"  🔍 Searching for compensation column in row {header_row}...")
 
-        for col_num in range(1, sheet.max_column + 1):
+        max_r, max_c = get_safe_dimensions(sheet)
+        for col_num in range(1, max_c + 1):
             header = str(sheet.cell(row=header_row, column=col_num).value or "").strip().lower()
 
             if "customer compensation" in header and "recoupment" in header:
@@ -610,9 +634,9 @@ def count_nonzero_compensation(sheet, data_row=1):
         count = 0
         data_start_row = header_row + 1  # Row 6 onwards
 
-        print(f"  🔄 Counting non-zero compensation from row {data_start_row} to {sheet.max_row}...")
+        print(f"  🔄 Counting non-zero compensation from row {data_start_row} to {max_r}...")
 
-        for row in range(data_start_row, sheet.max_row + 1):
+        for row in range(data_start_row, max_r + 1):
             value = sheet.cell(row=row, column=compensation_col).value
 
             # Check if value is non-zero
@@ -680,7 +704,8 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
     order_status_col = None
 
     print(f"🔍 Scanning headers in row {header_row}...")
-    for col_num in range(1, data1_sheet.max_column + 1):
+    max_r, max_c = get_safe_dimensions(data1_sheet)
+    for col_num in range(1, max_c + 1):
         header = str(data1_sheet.cell(row=header_row, column=col_num).value or "")
         header_lower = header.lower()
 
@@ -708,7 +733,8 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
     data_start_row = header_row + 1
     skipped_rows = 0
 
-    for row in range(data_start_row, data1_sheet.max_row + 1):
+    max_r, max_c = get_safe_dimensions(data1_sheet)
+    for row in range(data_start_row, max_r + 1):
         status_text = str(data1_sheet.cell(row=row, column=order_status_col).value or "").upper().strip()
 
         if status_text == "DELIVERED":
@@ -726,7 +752,7 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
             if isinstance(val, (int, float)) and val != 0:
                 target[i] += val
 
-    for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
+    for i, col in enumerate(range(item_total_col, max_c + 1)):
         data1_sheet.cell(row=1, column=col).value = cancelled[i]
         data1_sheet.cell(row=2, column=col).value = delivered[i]
         data1_sheet.cell(row=3, column=col).value = delivered[i] * 1.18
@@ -772,14 +798,16 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
         return list(matches)
 
     print("🔍 ALL D1W HEADERS (row 5):")
-    for col_num in range(1, data1_sheet.max_column + 1):
+    max_d1_r, max_d1_c = get_safe_dimensions(data1_sheet)
+    for col_num in range(1, max_d1_c + 1):
         header_raw = data1_sheet.cell(row=5, column=col_num).value
         header = str(header_raw or "").strip()
         if header:
             print(f"  Col {col_num}: '{header}'")
     print()
 
-    for row in range(1, cashflow.max_row + 1):
+    max_cf_r, _ = get_safe_dimensions(cashflow)
+    for row in range(1, max_cf_r + 1):
         label = str(cashflow.cell(row=row, column=2).value or "").strip()
         if not label or label not in ZOMATO_MAPPING:
             continue
@@ -874,7 +902,8 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
         if cashflow_label == "High Priority":
             # 1. Look for Total Additions to deduct
             print("  🔍 Checking D2W for 'Total Additions'...")
-            for row in range(1, d2_sheet.max_row + 1):
+            max_r_d2, max_c_d2 = get_safe_dimensions(d2_sheet)
+            for row in range(1, max_r_d2 + 1):
                 label = str(d2_sheet[f"{search_col}{row}"].value or "").strip().lower()
                 if label == "total additions":
                     addition_row = row
@@ -884,7 +913,8 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
             # 2. Look for Extra Inventory Ads from D1W
             if d1_sheet:
                 print("  🔍 Checking D1W for 'Extra inventory ads (order level deduction)'...")
-                for col_idx in range(1, d1_sheet.max_column + 1):
+                max_r_d1, max_c_d1 = get_safe_dimensions(d1_sheet)
+                for col_idx in range(1, max_c_d1 + 1):
                     h = str(d1_sheet.cell(row=5, column=col_idx).value or "").strip().lower()
                     if "extra inventory ads (order level deduction)" in h:
                         val = d1_sheet.cell(row=4, column=col_idx).value
@@ -895,7 +925,8 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
                         break
 
         # Main D2W search (existing logic)
-        for row in range(1, d2_sheet.max_row + 1):
+        max_r_d2, max_c_d2 = get_safe_dimensions(d2_sheet)
+        for row in range(1, max_r_d2 + 1):
             cell_value = str(d2_sheet[f"{search_col}{row}"].value or "").strip()
             for search_term in search_terms:
                 if cell_value == search_term:
@@ -907,7 +938,8 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
 
         # Mapping Logic
         if any([found_row, addition_row, extra_ads_formula_part]):
-            for cf_row in range(1, cashflow.max_row + 1):
+            max_cf_r, _ = get_safe_dimensions(cashflow)
+            for cf_row in range(1, max_cf_r + 1):
                 label = str(cashflow.cell(row=cf_row, column=2).value or "").strip()
                 if label == cashflow_label:
                     formula = "="
@@ -950,7 +982,8 @@ def map_commissionable_value_to_summary(summary_sheet, d1_sheet, week_num):
             "commissionable value\n(excludes customer gst)"
         ]
 
-        for col_num in range(1, d1_sheet.max_column + 1):
+        _, max_c = get_safe_dimensions(d1_sheet)
+        for col_num in range(1, max_c + 1):
             header = str(d1_sheet.cell(row=header_row, column=col_num).value or "").strip().lower()
 
             if "commissionable value" in header:
