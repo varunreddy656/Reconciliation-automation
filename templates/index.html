@@ -441,22 +441,98 @@
     </main>
   </div>
 
-  <!-- Neo-Luxury Loading Overlay -->
+  <!-- Generating Overlay with Gradient Blur -->
   <div id="loadingOverlay"
-    style="position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:99999; backdrop-filter: blur(20px);">
+    style="position:fixed; top:0; left:0; width:100%; height:100%; background: linear-gradient(135deg, rgba(34, 37, 255, 0.15), rgba(112, 0, 255, 0.15)); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:99999; backdrop-filter: blur(15px);">
+
+    <!-- Gradient Orbs -->
+    <div class="loading-orb loading-orb-1"></div>
+    <div class="loading-orb loading-orb-2"></div>
+
+    <!-- Loading Spinner -->
+    <div class="loader-spinner"></div>
+
     <div
-      style="font-family: 'Outfit', sans-serif; font-size: 5rem; font-weight: 900; color: white; margin-bottom: 20px; text-shadow: 0 0 30px rgba(255,255,255,0.3);"
-      id="loadingPercent">0%</div>
-    <div
-      style="width: 280px; height: 2px; background: rgba(255,255,255,0.1); position: relative; border-radius: 4px; overflow: hidden;">
-      <div id="loadingBar"
-        style="width: 0%; height: 100%; background: #fff; position: absolute; top:0; left:0; transition: width 0.3s; box-shadow: 0 0 15px #fff;">
-      </div>
-    </div>
-    <div
-      style="margin-top: 30px; font-size: 0.75rem; letter-spacing: 0.5em; color: rgba(255,255,255,0.4); text-transform: uppercase; font-weight: 600;">
-      Processing Data</div>
+      style="font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 600; color: white; letter-spacing: 0.2em; margin-top: 30px; text-shadow: 0 0 20px rgba(255,255,255,0.3);">
+      GENERATING...</div>
   </div>
+
+  <style>
+    .loading-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.4;
+      animation: orbPulse 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .loading-orb-1 {
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(64, 50, 255, 0.4) 0%, transparent 70%);
+      top: 20%;
+      left: 20%;
+      animation-delay: 0s;
+    }
+
+    .loading-orb-2 {
+      width: 250px;
+      height: 250px;
+      background: radial-gradient(circle, rgba(255, 0, 128, 0.3) 0%, transparent 70%);
+      bottom: 20%;
+      right: 20%;
+      animation-delay: 2s;
+    }
+
+    @keyframes orbPulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 0.3;
+      }
+
+      50% {
+        transform: scale(1.2);
+        opacity: 0.5;
+      }
+    }
+
+    .loader-spinner {
+      width: 70px;
+      height: 70px;
+      border: 5px solid rgba(255, 255, 255, 0.1);
+      border-top: 5px solid #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+      position: relative;
+      z-index: 1;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 0.6;
+      }
+
+      50% {
+        opacity: 1;
+      }
+    }
+  </style>
 
   <script>
     // --- SPLASH SCREEN LOGIC ---
@@ -596,32 +672,11 @@
       e.preventDefault();
       const form = e.target;
       const overlay = document.getElementById('loadingOverlay');
-      const progressText = document.getElementById('loadingPercent');
-      const progressBar = document.getElementById('loadingBar');
-
-      const taskId = 'task_' + Date.now();
-      const formData = new FormData(form);
-      formData.append('task_id', taskId);
 
       overlay.style.display = 'flex';
-      progressBar.style.width = '0%';
-      progressText.textContent = '0%';
-
-      const progressInterval = setInterval(async () => {
-        try {
-          const res = await fetch(`/progress/${taskId}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (progressBar) progressBar.style.width = `${data.progress}%`;
-            if (progressText) progressText.textContent = `${data.progress}%`;
-          }
-        } catch (err) {
-          console.log("Progress poll error:", err);
-        }
-      }, 1000);
 
       try {
-        const response = await fetch(apiEndpoint, { method: 'POST', body: formData });
+        const response = await fetch(apiEndpoint, { method: 'POST', body: new FormData(form) });
         let result;
         try {
           result = await response.json();
@@ -629,7 +684,6 @@
           throw new Error("Server returned non-JSON response. It might have crashed.");
         }
 
-        clearInterval(progressInterval);
         overlay.style.display = 'none';
 
         if (response.ok && result.success) {
@@ -642,7 +696,6 @@
           alert('Error: ' + (result.message || 'Processing failed on server'));
         }
       } catch (err) {
-        clearInterval(progressInterval);
         overlay.style.display = 'none';
         console.error("Submission Error:", err);
 

@@ -112,13 +112,29 @@ body {
 #splash-screen {
     position: fixed;
     inset: 0;
-    background: #000;
+    background: linear-gradient(-45deg, #050505, #110022, #220033, #050505);
+    background-size: 400% 400%;
+    animation: splashGradient 8s ease infinite;
     z-index: 10000;
     display: flex;
     justify-content: center;
     align-items: center;
     transition: clip-path 1.5s cubic-bezier(0.77, 0, 0.175, 1);
     overflow: hidden;
+}
+
+@keyframes splashGradient {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
 }
 
 /* Cosmic Orbs for Splash */
@@ -131,15 +147,16 @@ body {
 .splash-orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(100px);
-    opacity: 0.5;
-    animation: orbFloat 20s infinite alternate;
+    filter: blur(120px);
+    opacity: 0.8;
+    /* Higher opacity for better visibility */
+    animation: orbFloat 15s infinite alternate;
 }
 
 .orb-1 {
     width: 600px;
     height: 600px;
-    background: radial-gradient(circle, rgba(64, 50, 255, 0.3) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(0, 100, 255, 0.5) 0%, transparent 70%);
     top: -200px;
     left: -200px;
 }
@@ -147,7 +164,7 @@ body {
 .orb-2 {
     width: 500px;
     height: 500px;
-    background: radial-gradient(circle, rgba(255, 0, 128, 0.2) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255, 0, 150, 0.4) 0%, transparent 70%);
     bottom: -150px;
     right: -150px;
     animation-delay: -5s;
@@ -173,15 +190,12 @@ body {
     font-family: 'Outfit', sans-serif;
     font-size: 4.5rem;
     font-weight: 900;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.3em;
     color: #ffffff;
     opacity: 0;
     filter: blur(10px);
     transform: scale(1.1);
     animation: splashIn 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards 0.5s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
 }
 
 @keyframes splashIn {
@@ -204,11 +218,11 @@ body {
 }
 
 .splash-author {
-    margin-top: 5px;
-    font-size: 1.2rem;
-    letter-spacing: 0.8em;
-    color: rgba(255, 255, 255, 0.6);
-    font-weight: 200;
+    margin-top: 15px;
+    font-size: 0.8rem;
+    letter-spacing: 0.6em;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 300;
     text-transform: uppercase;
     opacity: 0;
     animation: fadeIn 1.5s forwards 2s;
@@ -344,6 +358,7 @@ body {
 
 .section {
     display: none;
+    animation: sectionFade 0.6s ease forwards;
 }
 
 .section.active {

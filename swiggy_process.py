@@ -9,31 +9,6 @@ import time
 
 # ----------------- Helper Functions -----------------
 
-def safe_float(val):
-    if val is None: return 0.0
-    try:
-        if isinstance(val, str):
-            val = val.replace('₹', '').replace(',', '').strip()
-            if not val or val == '-': return 0.0
-        return float(val)
-    except:
-        return 0.0
-
-def get_safe_dimensions(sheet):
-    """Safe way to get max_row and max_column in read_only mode"""
-    max_r = sheet.max_row
-    max_c = sheet.max_column
-    if max_r is None or max_c is None:
-        if max_c is None:
-            for row in sheet.iter_rows(min_row=1, max_row=10):
-                if len(row) > (max_c or 0):
-                    max_c = len(row)
-        if max_r is None:
-            max_r = 0
-            for row in sheet.iter_rows(values_only=True):
-                max_r += 1
-    return max_r or 0, max_c or 0
-
 def extract_swiggy_start_day(filepath):
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
@@ -121,8 +96,8 @@ def generate_week_ranges(first_start, first_end, last_start, last_end, max_day=3
 
 
 def copy_data(src, tgt, start_row):
-    max_row, max_col = get_safe_dimensions(src)
-    tgt.delete_rows(1, tgt.max_row or 100)
+    max_row, max_col = src.max_row, src.max_column
+    tgt.delete_rows(1, tgt.max_row)
     for r in range(start_row, max_row + 1):
         for c in range(1, max_col + 1):
             tgt.cell(row=r - start_row + 1, column=c).value = src.cell(row=r, column=c).value
@@ -146,8 +121,7 @@ def count_non_zero_complaints(sheet):
     Returns the count as an integer.
     """
     complaints_col = None
-    max_r, max_c = get_safe_dimensions(sheet)
-    for col in range(1, max_c + 1):
+    for col in range(1, sheet.max_column + 1):
         cell_val = sheet.cell(row=5, column=col).value
         if cell_val and "customer complaints" in str(cell_val).strip().lower():
             complaints_col = col
@@ -156,7 +130,7 @@ def count_non_zero_complaints(sheet):
         print("Customer Complaints column not found in D1W sheet.")
         return 0
     count = 0
-    for row in range(6, max_r + 1):
+    for row in range(6, sheet.max_row + 1):
         value = sheet.cell(row=row, column=complaints_col).value
         if isinstance(value, (int, float)) and value != 0:
             count += 1
@@ -198,9 +172,8 @@ def map_values_to_cashflow(wb, data1_sheet, week):
         "TCS": "TCS"
     }
 
-    _, max_c_d1 = get_safe_dimensions(data1_sheet)
     headers = {str(data1_sheet.cell(row=5, column=c).value).strip(): c
-               for c in range(1, max_c_d1 + 1)
+               for c in range(1, data1_sheet.max_column + 1)
                if data1_sheet.cell(row=5, column=c).value}
 
     def find_column(header_name):
@@ -219,8 +192,7 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                         return col
         return None
 
-    max_cf_r, _ = get_safe_dimensions(cashflow)
-    for row in range(1, max_cf_r + 1):
+    for row in range(1, cashflow.max_row + 1):
         label = cashflow.cell(row=row, column=2).value
         if not label:
             continue
@@ -256,7 +228,7 @@ def map_values_to_cashflow(wb, data1_sheet, week):
         cashflow.cell(row=row, column=week_col).value = formula
 
     if data2_sheet:
-        for row in range(1, max_cf_r + 1):
+        for row in range(1, cashflow.max_row + 1):
             label = cashflow.cell(row=row, column=2).value
             if not label:
                 continue
@@ -385,8 +357,7 @@ def map_bank_to_actual_receipts_from_invoice_summary(recon_wb, week_expected_map
             bank_deposits.append((val, row))
             print(f"Bank deposit found at row {row} (raw: {orig_val}): {val}")
     actual_row = None
-    max_cf_r, _ = get_safe_dimensions(cashflow)
-    for row in range(1, max_cf_r + 1):
+    for row in range(1, cashflow.max_row + 1):
         cell_val = str(cashflow.cell(row=row, column=2).value).strip().lower() if cashflow.cell(row=row,
                                                                                                 column=2).value else ""
         if "actual receipts" in cell_val:
@@ -468,8 +439,7 @@ def add_notepoints_based_on_bank(recon_wb, week_ranges, bank_file_path):
         discrepancies.cell(row=23, column=2).value = None
 
     actual_row = None
-    max_cf_r, _ = get_safe_dimensions(cashflow)
-    for row in range(1, max_cf_r + 1):
+    for row in range(1, cashflow.max_row + 1):
         cell_val = str(cashflow.cell(row=row, column=2).value).strip().lower() if cashflow.cell(row=row, column=2).value else ""
         if "actual receipts" in cell_val:
             actual_row = row
@@ -626,7 +596,7 @@ def process_invoices_web(
             print(f"\nProcessing {fp} → Week {week}")
             
             # OPTIMIZATION: Open workbook ONCE
-            wb_invoice = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+            wb_invoice = openpyxl.load_workbook(fp, data_only=True)
             
             # Extract Expected Receipt from Summary sheet directly
             expected_receipt = None
@@ -692,7 +662,7 @@ def process_invoices_web(
         bank_wb = None
         try:
             if bank_file_path:
-                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False, read_only=True)
+                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False)
                 copy_bank_sheet_to_recon(bank_wb, recon)
                 print("Bank sheet imported into reconciliation file.")
                 map_bank_to_actual_receipts_from_invoice_summary(recon, week_expected_map, tolerance=10)

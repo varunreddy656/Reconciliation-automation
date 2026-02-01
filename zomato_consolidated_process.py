@@ -17,8 +17,7 @@ from process_invoices import (
     count_nonzero_compensation, 
     map_commissionable_value_to_summary,
     replace_month_in_sheets,
-    parse,
-    get_safe_dimensions
+    parse
 )
 import re
 
@@ -56,8 +55,7 @@ def copy_data_with_date_range(src, tgt, start_row, start_date, end_date):
     Assumes header is at start_row.
     """
     order_date_col = None
-    _, max_c = get_safe_dimensions(src)
-    for col_num in range(1, max_c + 1):
+    for col_num in range(1, src.max_column + 1):
         header = str(src.cell(row=start_row, column=col_num).value or "").strip().lower()
         if header == "order date":
             order_date_col = col_num
@@ -68,7 +66,7 @@ def copy_data_with_date_range(src, tgt, start_row, start_date, end_date):
         return 0
 
     # Write headers
-    for c in range(1, max_c + 1):
+    for c in range(1, src.max_column + 1):
         tgt.cell(row=1, column=c).value = src.cell(row=start_row, column=c).value
 
     tgt_row = 2
@@ -132,7 +130,7 @@ def process_zomato_consolidated(
         
         consolidated_fp = files[0]
         print(f"📊 Processing Consolidated File: {consolidated_fp.name}")
-        wb_source = openpyxl.load_workbook(consolidated_fp, data_only=True, read_only=True)
+        wb_source = openpyxl.load_workbook(consolidated_fp, data_only=True)
         
         # Find Order level sheet
         possible_order_sheets = ["Order Level", "Order level", "Order Details", "Orders"]
@@ -205,8 +203,7 @@ def process_zomato_consolidated(
             current_section = None
             type_col, period_col, total_col = -1, -1, -1
             
-            max_r_ads, _ = get_safe_dimensions(src_ads)
-            for row in range(1, max_r_ads + 1):
+            for row in range(1, src_ads.max_row + 1):
                 row_val_b = str(src_ads.cell(row=row, column=2).value or "").strip().lower()
                 
                 # Check for section headers
@@ -288,8 +285,7 @@ def process_zomato_consolidated(
         if "Cashflow" in recon.sheetnames:
             cashflow = recon["Cashflow"]
             high_priority_row = -1
-            max_cf_r, _ = get_safe_dimensions(cashflow)
-            for r in range(1, max_cf_r + 1):
+            for r in range(1, cashflow.max_row + 1):
                 label = str(cashflow.cell(row=r, column=2).value or "").strip().lower()
                 if label == "high priority":
                     high_priority_row = r

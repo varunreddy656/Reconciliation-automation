@@ -6,21 +6,6 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import gc
 
-def get_safe_dimensions(sheet):
-    """Safe way to get max_row and max_column in read_only mode"""
-    max_r = sheet.max_row
-    max_c = sheet.max_column
-    if max_r is None or max_c is None:
-        if max_c is None:
-            for row in sheet.iter_rows(min_row=1, max_row=10):
-                if len(row) > (max_c or 0):
-                    max_c = len(row)
-        if max_r is None:
-            max_r = 0
-            for row in sheet.iter_rows(values_only=True):
-                max_r += 1
-    return max_r or 0, max_c or 0
-
 def ordinal(n):
     """Convert number to ordinal (1→1st, 2→2nd, 3→3rd, etc.)"""
     try:
@@ -82,10 +67,8 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         ws_ads = out_wb["Zpay Ads"] if "Zpay Ads" in out_wb.sheetnames else out_wb.create_sheet("Zpay Ads")
         
         # Clear existing content
-        mr_calc, _ = get_safe_dimensions(ws_calc)
-        mr_ads, _ = get_safe_dimensions(ws_ads)
-        ws_calc.delete_rows(1, mr_calc or 100)
-        ws_ads.delete_rows(1, mr_ads or 100)
+        ws_calc.delete_rows(1, ws_calc.max_row)
+        ws_ads.delete_rows(1, ws_ads.max_row)
 
         processed_data = [] # Stores Transaction Summary
         ads_data = [] # Stores Ad Summary
@@ -169,23 +152,22 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
 
             if day is None: continue
             
-            # Handle Adjustments (Prev/Next month)
-            if target_month_num:
-                # Logic to determine if prev or next month relative to target
+            # Handle Adjustments (Prev/Next month) - Only if month differs
+            if target_month_num and m_num != target_month_num:
+                # Determine if previous or next month (with year boundary support)
                 is_prev = False
-                is_next = False
-                if m_num < target_month_num:
-                    if not (target_month_num == 1 and m_num == 12): is_prev = True # e.g., target Jan (1), m_num Dec (12) -> prev
-                    else: is_next = True # e.g., target Feb (2), m_num Jan (1) -> prev
-                elif m_num > target_month_num:
-                    if not (target_month_num == 12 and m_num == 1): is_next = True # e.g., target Dec (12), m_num Jan (1) -> next
-                    else: is_prev = True # e.g., target Nov (11), m_num Dec (12) -> next
-                
-                if is_prev: adj_prev_month += safe_float(row[col_net])
-                if is_next: adj_next_month += safe_float(row[col_net])
+                if target_month_num == 1 and m_num == 12: is_prev = True
+                elif target_month_num == 12 and m_num == 1: is_prev = False
+                elif m_num < target_month_num: is_prev = True
+                else: is_prev = False
 
+                if is_prev:
+                    adj_prev_month += safe_float(row[col_net])
+                else:
+                    adj_next_month += safe_float(row[col_net])
+                
                 # Skip weekly distribution for adjustment rows
-                if m_num != target_month_num: continue
+                continue
 
             for i, (ws, we) in enumerate(weeks):
                 if ws <= day <= we:
@@ -241,21 +223,21 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                 
                 if day is None: continue
 
-                # Handle Adjustments for Ads
-                if target_month_num:
+                # Handle Adjustments for Ads - Only if month differs
+                if target_month_num and m_num != target_month_num:
                     is_prev = False
-                    is_next = False
-                    if m_num < target_month_num:
-                        if not (target_month_num == 1 and m_num == 12): is_prev = True
-                        else: is_next = True
-                    elif m_num > target_month_num:
-                        if not (target_month_num == 12 and m_num == 1): is_next = True
-                        else: is_prev = True
-                    
-                    if is_prev: ads_prev_month += safe_float(row[col_ads_amt])
-                    if is_next: ads_next_month += safe_float(row[col_ads_amt])
+                    if target_month_num == 1 and m_num == 12: is_prev = True
+                    elif target_month_num == 12 and m_num == 1: is_prev = False
+                    elif m_num < target_month_num: is_prev = True
+                    else: is_prev = False
 
-                if day is None or (target_month_num and m_num != target_month_num):
+                    if is_prev:
+                        ads_prev_month += safe_float(row[col_ads_amt])
+                    else:
+                        ads_next_month += safe_float(row[col_ads_amt])
+                    continue
+                
+                if day is None:
                     continue
                 
                 for i, (ws, we) in enumerate(weeks):
@@ -273,25 +255,35 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         if "Zomato Pay" in out_wb.sheetnames:
             ws_final = out_wb["Zomato Pay"]
             
-            # Month/Client Replacement in B2/A2
-            ws_final["B2"].value = client_name
-            current_a2 = str(ws_final["A2"].value or "")
-            if "month" in current_a2.lower():
-                ws_final["A2"].value = current_a2.replace("Month", month).replace("month", month)
+            # Client name in B1, Month replacement in A2 and B2
+            ws_final["B1"].value = client_name
+            for cell_id in ["A2", "B2"]:
+                current_val = str(ws_final[cell_id].value or "")
+                if "month" in current_val.lower():
+                    ws_final[cell_id].value = current_val.replace("Month", month).replace("month", month)
             
-            # Paste Week Ranges starting at D6
+            # Paste Week Ranges starting at D5 (as requested)
             for i, (ws, we) in enumerate(weeks):
                 label = f"{ordinal(ws)} to {ordinal(we)}"
-                ws_final.cell(row=6, column=4+i).value = label
+                ws_final.cell(row=5, column=4+i).value = label
 
-            # Set Adjustments first
-            ws_final["D23"].value = adj_prev_month + ads_prev_month
-            ws_final["H24"].value = adj_next_month + ads_next_month
+            last_week_col = 4 + len(weeks) - 1 # Dynamically find last week column
 
             for r in range(1, ws_final.max_row + 1):
                 label = str(ws_final.cell(row=r, column=3).value or "").strip().lower()
                 
-                # Mapping Logic
+                # Handle Opening/Closing adjustments specifically
+                if "opening week" in label and "adjustment" in label:
+                    # Opening stock only in first week (column D = 4)
+                    ws_final.cell(row=r, column=4).value = adj_prev_month + ads_prev_month
+                    continue
+                
+                elif "closing week" in label and "adjustment" in label:
+                    # Closing stock only in last week
+                    ws_final.cell(row=r, column=last_week_col).value = adj_next_month + ads_next_month
+                    continue
+                
+                # Mapping Logic for other rows
                 if "sales (exclusive of gst) before failed and reversed transactions" in label:
                     for i in range(len(weeks)):
                         ws_final.cell(row=r, column=4+i).value = calc_results[i]['bill'] * (100.0/105.0)
