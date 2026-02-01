@@ -465,7 +465,8 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     order_date_col = None
     payout_col = None
 
-    for col_num in range(1, src.max_column + 1):
+    _, max_c = get_safe_dimensions(src)
+    for col_num in range(1, max_c + 1):
         header = str(src.cell(row=start_row, column=col_num).value or "").strip().lower()
         if header == "order date":
             order_date_col = col_num
@@ -474,8 +475,8 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
 
     if not order_date_col or not target_month:
         print(f"  ⚠️  Order Date or Target Month missing - copying all data")
-        max_row, max_col = src.max_row, src.max_column
-        tgt.delete_rows(1, tgt.max_row)
+        max_row, max_col = get_safe_dimensions(src)
+        tgt.delete_rows(1, tgt.max_row or 100)
         for r in range(start_row, max_row + 1):
             for c in range(1, max_col + 1):
                 tgt.cell(row=r - start_row + 1, column=c).value = src.cell(row=r, column=c).value
@@ -491,18 +492,19 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     opening_spillover_sum = 0
     closing_spillover_sum = 0
 
-    tgt.delete_rows(1, tgt.max_row)
-    for c in range(1, src.max_column + 1):
+    max_r, max_c = get_safe_dimensions(src)
+    tgt.delete_rows(1, tgt.max_row or 100)
+    for c in range(1, max_c + 1):
         tgt.cell(row=1, column=c).value = src.cell(row=start_row, column=c).value
 
     tgt_row = 2
     copied_rows = 0
     opening_rows = 0
     closing_rows = 0
-    max_col = src.max_column
+    max_col = max_c
     data_start_row = start_row + 1
 
-    print(f"  🔄 Scanning data rows {data_start_row} to {src.max_row}...")
+    print(f"  🔄 Scanning data rows {data_start_row} to {max_r}...")
 
     for row_values in src.iter_rows(min_row=data_start_row, values_only=True):
         try:
@@ -727,13 +729,13 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
 
     print(f"📊 Summing from col {item_total_col}")
 
-    delivered = [0] * (data1_sheet.max_column - item_total_col + 1)
-    cancelled = [0] * (data1_sheet.max_column - item_total_col + 1)
+    max_r, max_c = get_safe_dimensions(data1_sheet)
+    delivered = [0] * (max_c - item_total_col + 1)
+    cancelled = [0] * (max_c - item_total_col + 1)
 
     data_start_row = header_row + 1
     skipped_rows = 0
 
-    max_r, max_c = get_safe_dimensions(data1_sheet)
     for row in range(data_start_row, max_r + 1):
         status_text = str(data1_sheet.cell(row=row, column=order_status_col).value or "").upper().strip()
 
@@ -747,7 +749,7 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
 
         target = delivered if status == "delivered" else cancelled
 
-        for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
+        for i, col in enumerate(range(item_total_col, max_c + 1)):
             val = data1_sheet.cell(row=row, column=col).value
             if isinstance(val, (int, float)) and val != 0:
                 target[i] += val
@@ -782,7 +784,7 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
         week_col = 3 + (week - 1)
 
     headers = {}
-    for col_num in range(1, data1_sheet.max_column + 1):
+    for col_num in range(1, max_d1_c + 1):
         header_val = data1_sheet.cell(row=5, column=col_num).value
         if header_val:
             headers[str(header_val).strip().lower()] = col_num
@@ -1308,12 +1310,11 @@ def process_zomato_recon(
                     print(f"  📋 Target sheet: D2W{week_num}")
 
                     # Get dimensions
-                    max_row = d2_source.max_row
-                    max_col = d2_source.max_column
+                    max_row, max_col = get_safe_dimensions(d2_source)
                     print(f"  📏 Source dimensions: {max_row} rows × {max_col} cols")
 
                     # Clear target sheet
-                    if d2.max_row > 1:
+                    if d2.max_row and d2.max_row > 1:
                         d2.delete_rows(1, d2.max_row)
                         print(f"  🗑️  Cleared existing D2W{week_num} data")
 
