@@ -66,9 +66,11 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         ws_calc = out_wb["Zpay Calculations"] if "Zpay Calculations" in out_wb.sheetnames else out_wb.create_sheet("Zpay Calculations")
         ws_ads = out_wb["Zpay Ads"] if "Zpay Ads" in out_wb.sheetnames else out_wb.create_sheet("Zpay Ads")
         
-        # Clear existing content
-        ws_calc.delete_rows(1, ws_calc.max_row)
-        ws_ads.delete_rows(1, ws_ads.max_row)
+        # Clear existing content efficiently (avoid delete_rows which hog memory)
+        for ws in [ws_calc, ws_ads]:
+            for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+                for cell in row:
+                    cell.value = None
 
         processed_data = [] # Stores Transaction Summary
         ads_data = [] # Stores Ad Summary
@@ -269,40 +271,53 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
 
             last_week_col = 4 + len(weeks) - 1 # Dynamically find last week column
 
+            # Determine last week column index (D=4, E=5, F=6, G=7, H=8)
+            num_weeks = len(weeks)
+            last_col_idx = 4 + num_weeks - 1
+
             for r in range(1, ws_final.max_row + 1):
-                label = str(ws_final.cell(row=r, column=3).value or "").strip().lower()
+                raw_cell_val = str(ws_final.cell(row=r, column=3).value or "")
+                label = raw_cell_val.strip().lower()
                 
-                # Handle Opening/Closing adjustments specifically
-                if "opening week" in label and "adjustment" in label:
+                # Precise Adjustment Matching (Avoid possessives/plurals issues)
+                clean_label = label.replace("'s", "").replace("  ", " ")
+                
+                if "opening week" in clean_label and "adjustment" in clean_label:
                     # Opening stock only in first week (column D = 4)
                     ws_final.cell(row=r, column=4).value = adj_prev_month + ads_prev_month
+                    # Clear other week columns for this row
+                    for c_off in range(1, num_weeks):
+                        ws_final.cell(row=r, column=4+c_off).value = 0.0
                     continue
                 
-                elif "closing week" in label and "adjustment" in label:
-                    # Closing stock only in last week
-                    ws_final.cell(row=r, column=last_week_col).value = adj_next_month + ads_next_month
+                elif "closing week" in clean_label and "adjustment" in clean_label:
+                    # Closing stock only in the last week column
+                    ws_final.cell(row=r, column=last_col_idx).value = adj_next_month + ads_next_month
+                    # Clear previous week columns for this row
+                    for c_off in range(0, num_weeks - 1):
+                        ws_final.cell(row=r, column=4+c_off).value = 0.0
                     continue
                 
                 # Mapping Logic for other rows
-                if "sales (exclusive of gst) before failed and reversed transactions" in label:
-                    for i in range(len(weeks)):
+                if "sales (exclusive of gst) before failed" in label:
+                    for i in range(num_weeks):
                         ws_final.cell(row=r, column=4+i).value = calc_results[i]['bill'] * (100.0/105.0)
                 
                 elif "less: discounts" in label:
-                    for i in range(len(weeks)):
+                    for i in range(num_weeks):
                         ws_final.cell(row=r, column=4+i).value = -(calc_results[i]['disc'] * (100.0/105.0))
                 
                 elif "add : tips" in label:
-                    for i in range(len(weeks)):
+                    for i in range(num_weeks):
                         ws_final.cell(row=r, column=4+i).value = calc_results[i]['tip']
                 
                 elif "commission (inclusive of gst)" in label:
-                    for i in range(len(weeks)):
+                    for i in range(num_weeks):
                         ws_final.cell(row=r, column=4+i).value = calc_results[i]['comm'] * 1.18
                 
                 elif "zomatopay ads" in label:
-                    for i in range(len(weeks)):
-                        # Input ads are negative, map as positive: -(-val) = val
+                    for i in range(num_weeks):
+                        # Map ads to their respective weeks
                         ws_final.cell(row=r, column=4+i).value = -ads_weekly[i]
 
         # Save and Cleanup
