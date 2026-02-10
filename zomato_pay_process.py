@@ -325,6 +325,21 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         # Map ads to their respective weeks
                         ws_final.cell(row=r, column=4+i).value = -ads_weekly[i]
 
+        # Prepare Summary for AI
+        total_sales = sum(s['bill'] for s in weekly_stats.values()) * (100.0/105.0)
+        total_comm = sum(s['comm'] for s in weekly_stats.values()) * 1.18
+        total_ads = -sum(ads_weekly.values()) # Convert to positive expense
+        total_net = sum(s['net'] for s in weekly_stats.values())
+        
+        summary = {
+            "total_sales": round(total_sales, 2),
+            "total_commission": round(total_comm, 2),
+            "total_ad_spend": round(total_ads, 2),
+            "net_payout": round(total_net, 2),
+            "weekly_sales": [round(weekly_stats[i]['bill'] * (100.0/105.0), 2) for i in range(len(weeks))],
+            "adjustment_impact": round(adj_prev_month + ads_prev_month + adj_next_month + ads_next_month, 2)
+        }
+
         # Save and Cleanup
         output_filename = forced_filename if forced_filename else f"Zomato_Pay_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         full_path = os.path.join(output_dir, output_filename)
@@ -337,8 +352,8 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         
         if update_progress: update_progress(100)
         gc.collect()
-        return output_filename, None
+        return output_filename, summary, None
 
     except Exception as e:
         import traceback; traceback.print_exc()
-        return None, str(e)
+        return None, None, str(e)

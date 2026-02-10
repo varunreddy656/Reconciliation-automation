@@ -190,7 +190,7 @@ def upload_zomato_pay():
         
         output_filename = get_formatted_filename(client_name, "Zomato Pay", month)
 
-        output_file, error = zomato_pay_process.process_zomato_pay(
+        output_file, summary, error = zomato_pay_process.process_zomato_pay(
             invoice_files,
             app.config['ZOMATO_PAY_TEMPLATE'],
             app.config['OUTPUT_FOLDER'],
@@ -211,7 +211,10 @@ def upload_zomato_pay():
         return jsonify({
             'success': True, 
             'message': 'Zomato Pay Reconciliation Completed!',
-            'download_url': download_url
+            'download_url': download_url,
+            'summary': summary,
+            'client_name': client_name,
+            'month': month
         })
 
     except Exception as e:

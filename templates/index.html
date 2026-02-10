@@ -439,6 +439,40 @@
       </section>
 
     </main>
+
+    <!-- AI Analyst Toggle Button -->
+    <button id="aiToggleBtn" class="ai-fab">
+      <div class="ai-sparkle"></div>
+      <span class="ai-text">ASK ANALYST</span>
+    </button>
+
+    <!-- AI Analyst Drawer -->
+    <div id="aiDrawer" class="ai-drawer">
+      <div class="ai-drawer-header">
+        <div class="ai-status">
+          <div class="ai-status-dot pulse"></div>
+          <span id="aiStatusText">AI Analyst Ready</span>
+        </div>
+        <button id="aiCloseBtn" class="ai-close">&times;</button>
+      </div>
+      <div id="aiChatMessages" class="ai-chat-messages">
+        <div class="ai-message system">
+          Hello! I am your Performance Analyst. Once you generate a reconciliation, I can analyze the trends for you.
+        </div>
+      </div>
+      <div class="ai-chat-input-container">
+        <div id="aiLoadingModel" class="ai-model-loader" style="display:none;">
+          <div class="loader-linear"></div>
+          <span>Loading AI Brain (Local)...</span>
+        </div>
+        <textarea id="aiInput" class="ai-input" placeholder="Ask about your performance..." rows="1"></textarea>
+        <button id="aiSendBtn" class="ai-send-btn">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Generating Overlay with Gradient Blur -->
@@ -534,7 +568,7 @@
     }
   </style>
 
-  <script>
+  <script type="module">
     // --- SPLASH SCREEN LOGIC ---
     window.addEventListener('load', () => {
       // Ensure the container is ready behind the scenes
@@ -560,6 +594,7 @@
       document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
       document.getElementById(`${tabId}-section`).classList.add('active');
     }
+    window.switchTab = switchTab;
 
     function setReconMode(mode) {
       document.getElementById('recon_mode').value = mode;
@@ -587,6 +622,7 @@
         invoicesInput.multiple = false;
       }
     }
+    window.setReconMode = setReconMode;
 
     // --- FILE UPLOAD HELPERS ---
     function setupFileUpload(dropZoneId, fileInputId, fileListId) {
@@ -667,6 +703,114 @@
     setupDatePicker('paytmFirstWeekDisplay', 'paytmFirstWeekStart', 'paytmFirstWeekEnd');
     setupDatePicker('paytmLastWeekDisplay', 'paytmLastWeekStart', 'paytmLastWeekEnd');
 
+    // --- AI ANALYST LOGIC ---
+    let performanceData = {};
+    const aiToggleBtn = document.getElementById('aiToggleBtn');
+    const aiDrawer = document.getElementById('aiDrawer');
+    const aiCloseBtn = document.getElementById('aiCloseBtn');
+    const aiChatMessages = document.getElementById('aiChatMessages');
+    const aiInput = document.getElementById('aiInput');
+    const aiSendBtn = document.getElementById('aiSendBtn');
+    const aiStatusText = document.getElementById('aiStatusText');
+    const aiLoadingModel = document.getElementById('aiLoadingModel');
+
+    aiToggleBtn.addEventListener('click', () => aiDrawer.classList.add('open'));
+    aiCloseBtn.addEventListener('click', () => aiDrawer.classList.remove('open'));
+
+    // WebLLM Integration
+    let engine = null;
+    const modelId = "Phi-3-mini-4k-instruct-q4f16_1-MLC"; // Efficient and fast for browsers
+
+    async function initAI() {
+      if (engine) return;
+
+      aiLoadingModel.style.display = 'block';
+      aiStatusText.textContent = "Booting Brain...";
+
+      try {
+        const { CreateWebWorkerEngine } = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/+esm");
+
+        engine = await CreateWebWorkerEngine(
+          new Worker(new URL("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/dist/worker.js", import.meta.url), { type: "module" }),
+          modelId,
+          {
+            initProgressCallback: (report) => {
+              aiStatusText.textContent = `Loading: ${Math.round(report.progress * 100)}%`;
+            }
+          }
+        );
+
+        aiStatusText.textContent = "Analyst Online";
+        aiLoadingModel.style.display = 'none';
+      } catch (err) {
+        console.error("AI Init Error:", err);
+        aiStatusText.textContent = "AI Offline (WebGPU needed)";
+        aiLoadingModel.style.display = 'none';
+      }
+    }
+
+    async function sendMessage() {
+      const text = aiInput.value.trim();
+      if (!text) return;
+
+      if (!engine) {
+        await initAI();
+        if (!engine) return;
+      }
+
+      appendMessage('user', text);
+      aiInput.value = '';
+      aiInput.style.height = 'auto';
+
+      const aiMsgDiv = appendMessage('ai', 'Thinking...');
+
+      try {
+        const messages = [
+          { role: "system", content: "You are a high-end business performance analyst. Use the provided reconciliation data to provide insights. Be concise, professional, and data-driven. Reconciliation Data: " + JSON.stringify(performanceData) },
+          { role: "user", content: text }
+        ];
+
+        const chunks = await engine.chat.completions.create({
+          messages,
+          stream: true
+        });
+
+        let fullText = "";
+        for await (const chunk of chunks) {
+          const content = chunk.choices[0]?.delta?.content || "";
+          fullText += content;
+          aiMsgDiv.textContent = fullText;
+          aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+        }
+      } catch (err) {
+        aiMsgDiv.textContent = "Error: " + err.message;
+      }
+    }
+
+    function appendMessage(role, text) {
+      const div = document.createElement('div');
+      div.className = `ai-message ${role}`;
+      div.textContent = text;
+      aiChatMessages.appendChild(div);
+      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+      return div;
+    }
+
+    aiSendBtn.addEventListener('click', sendMessage);
+    aiInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Auto-resize textarea
+    aiInput.addEventListener('input', function () {
+      this.style.height = 'auto';
+      this.style.height = (this.scrollHeight) + 'px';
+    });
+
+
     // --- FORM HANDLING ---
     async function handleFormSubmit(e, apiEndpoint, resultId, downloadLinkId) {
       e.preventDefault();
@@ -687,6 +831,26 @@
         overlay.style.display = 'none';
 
         if (response.ok && result.success) {
+          // Store data for AI
+          if (result.summary) {
+            performanceData = {
+              client: result.client_name,
+              month: result.month,
+              type: apiEndpoint.split('/').pop() || 'Zomato',
+              ...result.summary
+            };
+
+            // Notify user AI has new data
+            setTimeout(() => {
+              const div = document.createElement('div');
+              div.className = 'ai-notification';
+              div.textContent = "AI Analyst has processed new data. Click to view insights.";
+              div.onclick = () => aiDrawer.classList.add('open');
+              document.body.appendChild(div);
+              setTimeout(() => div.classList.add('show'), 100);
+            }, 500);
+          }
+
           const resDiv = document.getElementById(resultId);
           const dlLink = document.getElementById(downloadLinkId);
           resDiv.style.display = 'block';
