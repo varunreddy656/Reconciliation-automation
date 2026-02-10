@@ -568,36 +568,38 @@
     }
   </style>
 
-  <script type="module">
+  <script>
     // --- SPLASH SCREEN LOGIC ---
-    window.addEventListener('load', () => {
-      // Ensure the container is ready behind the scenes
+    document.addEventListener('DOMContentLoaded', () => {
+      const splash = document.getElementById('splash-screen');
       const container = document.getElementById('app-container');
-      container.style.display = 'flex';
 
-      setTimeout(() => {
-        const splash = document.getElementById('splash-screen');
-
-        // Circular exit animation
+      // Safety timeout to ensure splash disappears even if load event is weird
+      const dismissSplash = () => {
+        container.style.display = 'flex';
         splash.style.clipPath = 'circle(0% at 50% 50%)';
+        setTimeout(() => { splash.style.display = 'none'; }, 1500);
+      };
 
-        setTimeout(() => {
-          splash.style.display = 'none';
-        }, 1500);
-      }, 4000);
+      setTimeout(dismissSplash, 3000);
+      splash.addEventListener('click', dismissSplash);
     });
 
     // --- TAB SWITCHING ---
     function switchTab(tabId) {
       document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-      document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+      const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
+      if (activeBtn) activeBtn.classList.add('active');
       document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
-      document.getElementById(`${tabId}-section`).classList.add('active');
+      const activeSection = document.getElementById(`${tabId}-section`);
+      if (activeSection) activeSection.classList.add('active');
     }
-    window.switchTab = switchTab;
 
     function setReconMode(mode) {
-      document.getElementById('recon_mode').value = mode;
+      const reconModeInput = document.getElementById('recon_mode');
+      if (!reconModeInput) return;
+      reconModeInput.value = mode;
+
       const weeklyBtn = document.getElementById('zomato-weekly-btn');
       const consolidatedBtn = document.getElementById('zomato-consolidated-btn');
       const weekContainer = document.getElementById('week-ranges-container');
@@ -605,24 +607,22 @@
       const dropZoneTitle = document.querySelector('#dropZone .drop-zone-title');
       const invoicesInput = document.getElementById('invoices');
 
-      // Both modes now require week ranges for processing
-      weekContainer.style.display = 'block';
+      if (weekContainer) weekContainer.style.display = 'block';
 
       if (mode === 'weekly') {
-        weeklyBtn.classList.add('active');
-        consolidatedBtn.classList.remove('active');
-        dropZoneTitle.textContent = 'Drop Weekly Files';
-        dropZoneHint.textContent = 'Support for multiple weekly invoices';
-        invoicesInput.multiple = true;
+        if (weeklyBtn) weeklyBtn.classList.add('active');
+        if (consolidatedBtn) consolidatedBtn.classList.remove('active');
+        if (dropZoneTitle) dropZoneTitle.textContent = 'Drop Weekly Files';
+        if (dropZoneHint) dropZoneHint.textContent = 'Support for multiple weekly invoices';
+        if (invoicesInput) invoicesInput.multiple = true;
       } else {
-        weeklyBtn.classList.remove('active');
-        consolidatedBtn.classList.add('active');
-        dropZoneTitle.textContent = 'Drop Consolidated File';
-        dropZoneHint.textContent = 'Upload single consolidated monthly file';
-        invoicesInput.multiple = false;
+        if (weeklyBtn) weeklyBtn.classList.remove('active');
+        if (consolidatedBtn) consolidatedBtn.classList.add('active');
+        if (dropZoneTitle) dropZoneTitle.textContent = 'Drop Consolidated File';
+        if (dropZoneHint) dropZoneHint.textContent = 'Upload single consolidated monthly file';
+        if (invoicesInput) invoicesInput.multiple = false;
       }
     }
-    window.setReconMode = setReconMode;
 
     // --- FILE UPLOAD HELPERS ---
     function setupFileUpload(dropZoneId, fileInputId, fileListId) {
@@ -633,10 +633,7 @@
       if (!dropZone || !fileInput) return;
 
       dropZone.addEventListener('click', () => fileInput.click());
-
-      fileInput.addEventListener('change', () => {
-        updateFileList(fileInput, fileList);
-      });
+      fileInput.addEventListener('change', () => updateFileList(fileInput, fileList));
 
       dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -703,8 +700,13 @@
     setupDatePicker('paytmFirstWeekDisplay', 'paytmFirstWeekStart', 'paytmFirstWeekEnd');
     setupDatePicker('paytmLastWeekDisplay', 'paytmLastWeekStart', 'paytmLastWeekEnd');
 
+    // Global performance data storage
+    window.performanceData = {};
+  </script>
+
+  <script type="module">
+
     // --- AI ANALYST LOGIC ---
-    let performanceData = {};
     const aiToggleBtn = document.getElementById('aiToggleBtn');
     const aiDrawer = document.getElementById('aiDrawer');
     const aiCloseBtn = document.getElementById('aiCloseBtn');
@@ -766,7 +768,7 @@
 
       try {
         const messages = [
-          { role: "system", content: "You are a high-end business performance analyst. Use the provided reconciliation data to provide insights. Be concise, professional, and data-driven. Reconciliation Data: " + JSON.stringify(performanceData) },
+          { role: "system", content: "You are a high-end business performance analyst. Use the provided reconciliation data to provide insights. Be concise, professional, and data-driven. Reconciliation Data: " + JSON.stringify(window.performanceData) },
           { role: "user", content: text }
         ];
 
@@ -833,7 +835,7 @@
         if (response.ok && result.success) {
           // Store data for AI
           if (result.summary) {
-            performanceData = {
+            window.performanceData = {
               client: result.client_name,
               month: result.month,
               type: apiEndpoint.split('/').pop() || 'Zomato',
