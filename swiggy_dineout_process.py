@@ -99,7 +99,9 @@ def apply_sd_calculations(ws):
         'discount': 0.0,
         'service_fee': 0.0,
         'ads': 0.0,
-        'tip': 0.0
+        'tip': 0.0,
+        'outstanding': 0.0,
+        'sd_refunds': 0.0
     }
     
     # Iterate through all rows in the sheet
@@ -154,6 +156,16 @@ def apply_sd_calculations(ws):
             positive_val = -val_d
             cell_e.value = positive_val
             total_ads += positive_val
+
+        elif "OUTSTANDING_FOR_PREVIOUS_WEEKS" in label:
+            # Map column D value
+            cell_e.value = val_d
+            extracted['outstanding'] = val_d
+
+        elif "REFUND_FOR_SWIGGY_SERVICE_FEE" in label:
+            # Map column D value 
+            cell_e.value = val_d
+            extracted['sd_refunds'] = val_d
 
     # Write Total Ads to F1
     ws['F1'] = total_ads
@@ -217,7 +229,9 @@ def consolidate_swiggy_dineout(out_wb, sd_data_map, client_name="", month_name="
         "less: Discounts": {'key': 'discount', 'col': 2, 'negate': True},
         "Swiggy Platform Service Fee": {'key': 'service_fee', 'col': 2},
         "add: Tips": {'key': 'tip', 'col': 2},
-        "Carousel, High Priority, Banner": {'key': 'ads', 'col': 2} 
+        "Carousel, High Priority, Banner": {'key': 'ads', 'col': 2},
+        "less: Other adjustments": {'key': 'outstanding', 'col': 2},
+        "add: Refunds (+ve refunds)": {'key': 'sd_refunds', 'col': 2}
     }
     
     found_rows = {}

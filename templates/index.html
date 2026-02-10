@@ -439,40 +439,6 @@
       </section>
 
     </main>
-
-    <!-- AI Analyst Toggle Button -->
-    <button id="aiToggleBtn" class="ai-fab">
-      <div class="ai-sparkle"></div>
-      <span class="ai-text">ASK ANALYST</span>
-    </button>
-
-    <!-- AI Analyst Drawer -->
-    <div id="aiDrawer" class="ai-drawer">
-      <div class="ai-drawer-header">
-        <div class="ai-status">
-          <div class="ai-status-dot pulse"></div>
-          <span id="aiStatusText">AI Analyst Ready</span>
-        </div>
-        <button id="aiCloseBtn" class="ai-close">&times;</button>
-      </div>
-      <div id="aiChatMessages" class="ai-chat-messages">
-        <div class="ai-message system">
-          Hello! I am your Performance Analyst. Once you generate a reconciliation, I can analyze the trends for you.
-        </div>
-      </div>
-      <div class="ai-chat-input-container">
-        <div id="aiLoadingModel" class="ai-model-loader" style="display:none;">
-          <div class="loader-linear"></div>
-          <span>Loading AI Brain (Local)...</span>
-        </div>
-        <textarea id="aiInput" class="ai-input" placeholder="Ask about your performance..." rows="1"></textarea>
-        <button id="aiSendBtn" class="ai-send-btn">
-          <svg viewBox="0 0 24 24" width="24" height="24">
-            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-          </svg>
-        </button>
-      </div>
-    </div>
   </div>
 
   <!-- Generating Overlay with Gradient Blur -->
@@ -570,36 +536,33 @@
 
   <script>
     // --- SPLASH SCREEN LOGIC ---
-    document.addEventListener('DOMContentLoaded', () => {
-      const splash = document.getElementById('splash-screen');
+    window.addEventListener('load', () => {
+      // Ensure the container is ready behind the scenes
       const container = document.getElementById('app-container');
+      container.style.display = 'flex';
 
-      // Safety timeout to ensure splash disappears even if load event is weird
-      const dismissSplash = () => {
-        container.style.display = 'flex';
+      setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+
+        // Circular exit animation
         splash.style.clipPath = 'circle(0% at 50% 50%)';
-        setTimeout(() => { splash.style.display = 'none'; }, 1500);
-      };
 
-      setTimeout(dismissSplash, 3000);
-      splash.addEventListener('click', dismissSplash);
+        setTimeout(() => {
+          splash.style.display = 'none';
+        }, 1500);
+      }, 4000);
     });
 
     // --- TAB SWITCHING ---
     function switchTab(tabId) {
       document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-      const activeBtn = document.querySelector(`[data-tab="${tabId}"]`);
-      if (activeBtn) activeBtn.classList.add('active');
+      document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
       document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
-      const activeSection = document.getElementById(`${tabId}-section`);
-      if (activeSection) activeSection.classList.add('active');
+      document.getElementById(`${tabId}-section`).classList.add('active');
     }
 
     function setReconMode(mode) {
-      const reconModeInput = document.getElementById('recon_mode');
-      if (!reconModeInput) return;
-      reconModeInput.value = mode;
-
+      document.getElementById('recon_mode').value = mode;
       const weeklyBtn = document.getElementById('zomato-weekly-btn');
       const consolidatedBtn = document.getElementById('zomato-consolidated-btn');
       const weekContainer = document.getElementById('week-ranges-container');
@@ -607,20 +570,21 @@
       const dropZoneTitle = document.querySelector('#dropZone .drop-zone-title');
       const invoicesInput = document.getElementById('invoices');
 
-      if (weekContainer) weekContainer.style.display = 'block';
+      // Both modes now require week ranges for processing
+      weekContainer.style.display = 'block';
 
       if (mode === 'weekly') {
-        if (weeklyBtn) weeklyBtn.classList.add('active');
-        if (consolidatedBtn) consolidatedBtn.classList.remove('active');
-        if (dropZoneTitle) dropZoneTitle.textContent = 'Drop Weekly Files';
-        if (dropZoneHint) dropZoneHint.textContent = 'Support for multiple weekly invoices';
-        if (invoicesInput) invoicesInput.multiple = true;
+        weeklyBtn.classList.add('active');
+        consolidatedBtn.classList.remove('active');
+        dropZoneTitle.textContent = 'Drop Weekly Files';
+        dropZoneHint.textContent = 'Support for multiple weekly invoices';
+        invoicesInput.multiple = true;
       } else {
-        if (weeklyBtn) weeklyBtn.classList.remove('active');
-        if (consolidatedBtn) consolidatedBtn.classList.add('active');
-        if (dropZoneTitle) dropZoneTitle.textContent = 'Drop Consolidated File';
-        if (dropZoneHint) dropZoneHint.textContent = 'Upload single consolidated monthly file';
-        if (invoicesInput) invoicesInput.multiple = false;
+        weeklyBtn.classList.remove('active');
+        consolidatedBtn.classList.add('active');
+        dropZoneTitle.textContent = 'Drop Consolidated File';
+        dropZoneHint.textContent = 'Upload single consolidated monthly file';
+        invoicesInput.multiple = false;
       }
     }
 
@@ -633,7 +597,10 @@
       if (!dropZone || !fileInput) return;
 
       dropZone.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', () => updateFileList(fileInput, fileList));
+
+      fileInput.addEventListener('change', () => {
+        updateFileList(fileInput, fileList);
+      });
 
       dropZone.addEventListener('dragover', (e) => {
         e.preventDefault();
@@ -670,7 +637,43 @@
     setupFileUpload('zpayDropZone', 'zpayInvoices', 'zpayFileList');
     setupFileUpload('paytmDropZone', 'paytmInvoices', 'paytmFileList');
 
-    // --- DATE PICKER SETUP ---
+    // --- SMART RANGE SYNC & PERSISTENCE ---
+    const RANGE_PAIRS = [
+      { start: 'first_week_start', end: 'first_week_end', text: 'firstWeekText', display: 'firstWeekDisplay' },
+      { start: 'last_week_start', end: 'last_week_end', text: 'lastWeekText', display: 'lastWeekDisplay' },
+      { start: 'zpayFirstWeekStart', end: 'zpayFirstWeekEnd', text: 'zpayFirstWeekText', display: 'zpayFirstWeekDisplay' },
+      { start: 'zpayLastWeekStart', end: 'zpayLastWeekEnd', text: 'zpayLastWeekText', display: 'zpayLastWeekDisplay' },
+      { start: 'paytmFirstWeekStart', end: 'paytmFirstWeekEnd', text: 'paytmFirstWeekText', display: 'paytmFirstWeekDisplay' },
+      { start: 'paytmLastWeekStart', end: 'paytmLastWeekEnd', text: 'paytmLastWeekText', display: 'paytmLastWeekDisplay' },
+      // Swiggy is separate as requested
+      { start: 'swiggyFirstWeekStart', end: 'swiggyFirstWeekEnd', text: 'swiggyFirstWeekText', display: 'swiggyFirstWeekDisplay', standalone: true },
+      { start: 'swiggyLastWeekStart', end: 'swiggyLastWeekEnd', text: 'swiggyLastWeekText', display: 'swiggyLastWeekDisplay', standalone: true }
+    ];
+
+    function saveRanges() {
+      const data = {};
+      RANGE_PAIRS.forEach(p => {
+        data[p.start] = document.getElementById(p.start).value;
+        data[p.end] = document.getElementById(p.end).value;
+        data[p.text] = document.getElementById(p.text).textContent;
+      });
+      localStorage.setItem('reconRanges', JSON.stringify(data));
+    }
+
+    function loadRanges() {
+      const saved = localStorage.getItem('reconRanges');
+      if (!saved) return;
+      const data = JSON.parse(saved);
+      RANGE_PAIRS.forEach(p => {
+        if (data[p.start]) {
+          document.getElementById(p.start).value = data[p.start];
+          document.getElementById(p.end).value = data[p.end];
+          document.getElementById(p.text).textContent = data[p.text];
+        }
+      });
+    }
+
+    // DATE PICKER SETUP
     function setupDatePicker(displayId, startId, endId) {
       const display = document.getElementById(displayId);
       const startInput = document.getElementById(startId);
@@ -683,13 +686,38 @@
         dateFormat: "Y-m-d",
         onChange: function (selectedDates, dateStr, instance) {
           if (selectedDates.length === 2) {
-            startInput.value = selectedDates[0].getDate();
-            endInput.value = selectedDates[1].getDate();
+            const startDate = selectedDates[0].getDate();
+            const endDate = selectedDates[1].getDate();
+
+            // Apply to this input
+            startInput.value = startDate;
+            endInput.value = endDate;
             textSpan.textContent = dateStr;
+
+            // --- SYNC LOGIC ---
+            // If this is NOT a swiggy input, sync with other non-swiggy inputs
+            const currentPair = RANGE_PAIRS.find(p => p.display === displayId);
+            if (currentPair && !currentPair.standalone) {
+              const isFirstWeek = displayId.toLowerCase().includes('first');
+              RANGE_PAIRS.forEach(p => {
+                if (!p.standalone) {
+                  const targetIsFirst = p.display.toLowerCase().includes('first');
+                  if (targetIsFirst === isFirstWeek) {
+                    document.getElementById(p.start).value = startDate;
+                    document.getElementById(p.end).value = endDate;
+                    document.getElementById(p.text).textContent = dateStr;
+                  }
+                }
+              });
+            }
+            saveRanges();
           }
         }
       });
     }
+
+    // Initialize
+    loadRanges();
 
     setupDatePicker('firstWeekDisplay', 'first_week_start', 'first_week_end');
     setupDatePicker('lastWeekDisplay', 'last_week_start', 'last_week_end');
@@ -699,119 +727,6 @@
     setupDatePicker('zpayLastWeekDisplay', 'zpayLastWeekStart', 'zpayLastWeekEnd');
     setupDatePicker('paytmFirstWeekDisplay', 'paytmFirstWeekStart', 'paytmFirstWeekEnd');
     setupDatePicker('paytmLastWeekDisplay', 'paytmLastWeekStart', 'paytmLastWeekEnd');
-
-    // Global performance data storage
-    window.performanceData = {};
-  </script>
-
-  <script type="module">
-
-    // --- AI ANALYST LOGIC ---
-    const aiToggleBtn = document.getElementById('aiToggleBtn');
-    const aiDrawer = document.getElementById('aiDrawer');
-    const aiCloseBtn = document.getElementById('aiCloseBtn');
-    const aiChatMessages = document.getElementById('aiChatMessages');
-    const aiInput = document.getElementById('aiInput');
-    const aiSendBtn = document.getElementById('aiSendBtn');
-    const aiStatusText = document.getElementById('aiStatusText');
-    const aiLoadingModel = document.getElementById('aiLoadingModel');
-
-    aiToggleBtn.addEventListener('click', () => aiDrawer.classList.add('open'));
-    aiCloseBtn.addEventListener('click', () => aiDrawer.classList.remove('open'));
-
-    // WebLLM Integration
-    let engine = null;
-    const modelId = "Phi-3-mini-4k-instruct-q4f16_1-MLC"; // Efficient and fast for browsers
-
-    async function initAI() {
-      if (engine) return;
-
-      aiLoadingModel.style.display = 'block';
-      aiStatusText.textContent = "Booting Brain...";
-
-      try {
-        const { CreateWebWorkerEngine } = await import("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/+esm");
-
-        engine = await CreateWebWorkerEngine(
-          new Worker(new URL("https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.46/dist/worker.js", import.meta.url), { type: "module" }),
-          modelId,
-          {
-            initProgressCallback: (report) => {
-              aiStatusText.textContent = `Loading: ${Math.round(report.progress * 100)}%`;
-            }
-          }
-        );
-
-        aiStatusText.textContent = "Analyst Online";
-        aiLoadingModel.style.display = 'none';
-      } catch (err) {
-        console.error("AI Init Error:", err);
-        aiStatusText.textContent = "AI Offline (WebGPU needed)";
-        aiLoadingModel.style.display = 'none';
-      }
-    }
-
-    async function sendMessage() {
-      const text = aiInput.value.trim();
-      if (!text) return;
-
-      if (!engine) {
-        await initAI();
-        if (!engine) return;
-      }
-
-      appendMessage('user', text);
-      aiInput.value = '';
-      aiInput.style.height = 'auto';
-
-      const aiMsgDiv = appendMessage('ai', 'Thinking...');
-
-      try {
-        const messages = [
-          { role: "system", content: "You are a high-end business performance analyst. Use the provided reconciliation data to provide insights. Be concise, professional, and data-driven. Reconciliation Data: " + JSON.stringify(window.performanceData) },
-          { role: "user", content: text }
-        ];
-
-        const chunks = await engine.chat.completions.create({
-          messages,
-          stream: true
-        });
-
-        let fullText = "";
-        for await (const chunk of chunks) {
-          const content = chunk.choices[0]?.delta?.content || "";
-          fullText += content;
-          aiMsgDiv.textContent = fullText;
-          aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
-        }
-      } catch (err) {
-        aiMsgDiv.textContent = "Error: " + err.message;
-      }
-    }
-
-    function appendMessage(role, text) {
-      const div = document.createElement('div');
-      div.className = `ai-message ${role}`;
-      div.textContent = text;
-      aiChatMessages.appendChild(div);
-      aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
-      return div;
-    }
-
-    aiSendBtn.addEventListener('click', sendMessage);
-    aiInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-
-    // Auto-resize textarea
-    aiInput.addEventListener('input', function () {
-      this.style.height = 'auto';
-      this.style.height = (this.scrollHeight) + 'px';
-    });
-
 
     // --- FORM HANDLING ---
     async function handleFormSubmit(e, apiEndpoint, resultId, downloadLinkId) {
@@ -833,26 +748,6 @@
         overlay.style.display = 'none';
 
         if (response.ok && result.success) {
-          // Store data for AI
-          if (result.summary) {
-            window.performanceData = {
-              client: result.client_name,
-              month: result.month,
-              type: apiEndpoint.split('/').pop() || 'Zomato',
-              ...result.summary
-            };
-
-            // Notify user AI has new data
-            setTimeout(() => {
-              const div = document.createElement('div');
-              div.className = 'ai-notification';
-              div.textContent = "AI Analyst has processed new data. Click to view insights.";
-              div.onclick = () => aiDrawer.classList.add('open');
-              document.body.appendChild(div);
-              setTimeout(() => div.classList.add('show'), 100);
-            }, 500);
-          }
-
           const resDiv = document.getElementById(resultId);
           const dlLink = document.getElementById(downloadLinkId);
           resDiv.style.display = 'block';

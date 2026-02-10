@@ -3,3 +3,4 @@ openpyxl==3.1.5
 Werkzeug==3.0.1
 pandas>=2.2.3
 gunicorn==21.2.0
+Pillow>=10.0.0

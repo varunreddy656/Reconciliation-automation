@@ -68,17 +68,21 @@ def process_paytm(
 
         if progress_callback: progress_callback(40)
 
-        # 4. Identify Columns in Row 10
-        status_col, amount_col, commission_col, date_col = -1, -1, -1, -1
-        for idx, h in enumerate(headers):
-            h_clean = str(h).strip().lower()
-            if h_clean == "status": status_col = idx
-            if h_clean == "amount": amount_col = idx
-            if h_clean == "commission": commission_col = idx
-            if h_clean == "transaction_date": date_col = idx
+        # 4. Robust Column Identification
+        def find_col(possible_names):
+            for name in possible_names:
+                for idx, h in enumerate(headers):
+                    if name.lower() in str(h).lower(): return idx
+            return -1
 
-        if -1 in [status_col, amount_col, commission_col, date_col]:
-            return {'success': False, 'message': f'Required columns not found. Found: Status={status_col}, Amount={amount_col}, Commission={commission_col}, Date={date_col}'}
+        status_col = find_col(["status", "transaction_status", "txn_status"])
+        amount_col = find_col(["amount", "txn_amount", "transaction_amount", "order_amount"])
+        commission_col = find_col(["commission", "fee", "gateway_fee", "charges"])
+        gst_col = find_col(["gst", "cgst", "sgst", "igst", "tax"])
+        date_col = find_col(["transaction_date", "date", "txn_date", "time"])
+
+        if -1 in [amount_col, date_col]:
+             return {'success': False, 'message': f'Required columns not found. Found: Amount={amount_col}, Date={date_col}. (Status={status_col}, Commission={commission_col})'}
 
         # 5. Calculate Week Structure
         week_structure = calculate_week_structure(month, first_week_start, first_week_end, last_week_start, last_week_end)
@@ -90,9 +94,9 @@ def process_paytm(
         weekly_stats = {w['week_num']: {'amt': 0.0, 'comm': 0.0, 'label': w['label']} for w in week_structure}
         
         for idx, row in df_src.iterrows():
-            # Check Status
-            status = str(row.iloc[status_col]).strip().upper().replace("'", "")
-            if status != "SUCCESS": continue
+            # Check Status - Robust Success Filter
+            status = str(row.iloc[status_col] if status_col != -1 else "SUCCESS").strip().upper().replace("'", "")
+            if "SUCCESS" not in status: continue
             
             # Check Date
             date_val = str(row.iloc[date_col]).replace("'", "").strip()
@@ -107,14 +111,18 @@ def process_paytm(
                 if week['start_date'].date() <= row_date <= week['end_date'].date():
                     wn = week['week_num']
                     weekly_stats[wn]['amt'] += safe_float(row.iloc[amount_col])
-                    weekly_stats[wn]['comm'] += safe_float(row.iloc[commission_col])
+                    
+                    # Sum Commission + GST from source file
+                    comm_val = safe_float(row.iloc[commission_col]) if commission_col != -1 else 0.0
+                    gst_val = safe_float(row.iloc[gst_col]) if gst_col != -1 else 0.0
+                    weekly_stats[wn]['comm'] += (comm_val + gst_val)
                     break
 
         # 7. Write results to Paytm Calculations
         for wn, stats in weekly_stats.items():
             col = 7 + (wn - 1) # G, H, I...
             ws_calc.cell(row=2, column=col).value = stats['amt'] * 100.0 / 105.0
-            ws_calc.cell(row=3, column=col).value = stats['comm'] * 1.18
+            ws_calc.cell(row=3, column=col).value = stats['comm'] # Already includes GST from source
             ws_calc.cell(row=1, column=col).value = f"Week {wn}"
 
         if progress_callback: progress_callback(70)
@@ -123,12 +131,13 @@ def process_paytm(
         # Client Name in A1
         ws_recon["A1"].value = client_name
 
-        # Month Replacement in A2
-        current_a2 = str(ws_recon["A2"].value or "")
-        if "month" in current_a2.lower():
-            ws_recon["A2"].value = current_a2.replace("Month", month).replace("month", month)
-        else:
-            ws_recon["A2"].value = client_name
+        # Month Replacement in A2 and B2
+        for cell_id in ["A2", "B2"]:
+            current_val = str(ws_recon[cell_id].value or "")
+            if "month" in current_val.lower():
+                ws_recon[cell_id].value = current_val.replace("Month", month).replace("month", month)
+            elif cell_id == "A2" and not current_val:
+                ws_recon["A2"].value = client_name
         
         # Week ranges starting C5
         for wn, stats in weekly_stats.items():

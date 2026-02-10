@@ -83,14 +83,38 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             temp_files.append(temp_path)
 
             wb_in = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
-            if "Transactions summary" in wb_in.sheetnames:
-                # Capture from actual data row 7
-                for row in wb_in["Transactions summary"].iter_rows(min_row=7, values_only=True):
-                    if any(row): processed_data.append(row)
             
+            # Capture Transactions - search for header row dynamically
+            if "Transactions summary" in wb_in.sheetnames:
+                ws_in = wb_in["Transactions summary"]
+                # Scanning rows 1-10 for headers
+                header_row_idx = -1
+                for r in range(1, 11):
+                    row_vals = [str(c).lower() if c else "" for c in next(ws_in.iter_rows(min_row=r, max_row=r, values_only=True))]
+                    if any("date" in h for h in row_vals) and any("bill" in h for h in row_vals):
+                        header_row_idx = r
+                        break
+                
+                if header_row_idx != -1:
+                    # Include headers as the first row in processed_data for find_col
+                    rows = list(ws_in.iter_rows(min_row=header_row_idx, values_only=True))
+                    for row in rows:
+                        if any(row): processed_data.append(row)
+            
+            # Capture Ads - search for header row dynamically
             if "Additions & deductions" in wb_in.sheetnames:
-                for row in wb_in["Additions & deductions"].iter_rows(min_row=3, values_only=True):
-                    if any(row): ads_data.append(row)
+                ws_in = wb_in["Additions & deductions"]
+                header_row_idx = -1
+                for r in range(1, 6):
+                    row_vals = [str(c).lower() if c else "" for c in next(ws_in.iter_rows(min_row=r, max_row=r, values_only=True))]
+                    if any("type" in h for h in row_vals) and any("amount" in h for h in row_vals):
+                        header_row_idx = r
+                        break
+                
+                if header_row_idx != -1:
+                    rows = list(ws_in.iter_rows(min_row=header_row_idx, values_only=True))
+                    for row in rows:
+                        if any(row): ads_data.append(row)
             wb_in.close()
         
         if update_progress: update_progress(35)
@@ -105,17 +129,12 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
 
         if update_progress: update_progress(60)
 
-        # 4. Calculation Mapping (Headers sit at Row 15)
+        # 4. Calculation Mapping (Headers are the first row of collected data)
+        headers = [str(h).strip().lower() if h else "" for h in processed_data[0]] if processed_data else []
         def find_col(possible_names):
-            # Scan rows 14-16 just in case of slight shifts
-            for r in [15, 14, 16]:
-                try:
-                    row_headers = [str(cell.value).strip().lower() if cell.value else "" for cell in ws_calc[r]]
-                    for name in possible_names:
-                        for idx, h in enumerate(row_headers):
-                            if name.lower() in h: return idx
-                except:
-                    continue
+            for name in possible_names:
+                for idx, h in enumerate(headers):
+                    if name.lower() in h: return idx
             return -1
 
         col_date = find_col(["date and time", "date", "time", "transaction date"])
@@ -141,8 +160,8 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         adj_prev_month = 0.0
         adj_next_month = 0.0
 
-        # Performance: Loop over processed_data list directly (starting from Row 16 equivalent)
-        for idx, row in enumerate(processed_data):
+        # Performance: Loop over processed_data list directly (skip first row which is headers)
+        for idx, row in enumerate(processed_data[1:]):
             date_val = row[col_date]
             if not date_val: continue
             
@@ -187,8 +206,8 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                     stats['tip'] += safe_float(row[col_tip]) if col_tip != -1 else 0
                     stats['net'] += safe_float(row[col_net])
                     
-                    # Mark week for debugger
-                    ws_calc.cell(row=15+idx, column=len(row)+1).value = f"W{i+1}"
+                    # Mark week for debugger (idx already +1 from [1:] but ws_calc row starts at 16)
+                    ws_calc.cell(row=16+idx, column=len(row)+1).value = f"W{i+1}"
                     break
 
         # 5. Inject Weekly Results into Row 2-6 (G onwards)
@@ -203,20 +222,23 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             ws_calc.cell(row=5, column=x_col).value = stats['tip']
             ws_calc.cell(row=6, column=x_col).value = stats['net']
 
-        # 6. Zpay Ads Logic - Correction: headers are in row 6 (after insert_rows(1,5))
-        ads_headers = [str(ws_ads.cell(row=6, column=c).value).strip().lower() if ws_ads.cell(row=6, column=c).value else "" for c in range(1, ws_ads.max_column + 1)]
+        # 6. Zpay Ads Logic
+        ads_headers = [str(h).strip().lower() if h else "" for h in ads_data[0]] if ads_data else []
         col_ads_date = -1
         col_ads_amt = -1
+        col_ads_type = -1
         for idx, h in enumerate(ads_headers):
             if "date" in h: col_ads_date = idx
             if "amount" in h: col_ads_amt = idx
+            if "type" in h: col_ads_type = idx
         
         ads_weekly = {i: 0.0 for i in range(len(weeks))}
         ads_prev_month = 0.0
         ads_next_month = 0.0
 
         if col_ads_date != -1 and col_ads_amt != -1:
-            for idx, row in enumerate(ads_data):
+            # Skip first row which is headers
+            for idx, row in enumerate(ads_data[1:]):
                 date_val = row[col_ads_date]
                 if not date_val: continue
                 day, m_num = None, None
@@ -230,6 +252,10 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                 
                 if day is None: continue
 
+                val = safe_float(row[col_ads_amt])
+                # If it's a deduction (common for ads), it should be negative. 
+                # If the file already shows it as negative, safe_float handles it.
+                
                 # Handle Adjustments for Ads - Only if month differs
                 if target_month_num and m_num != target_month_num:
                     is_prev = False
@@ -239,17 +265,13 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                     else: is_prev = False
 
                     if is_prev:
-                        ads_prev_month += safe_float(row[col_ads_amt])
+                        ads_prev_month += val
                     else:
-                        ads_next_month += safe_float(row[col_ads_amt])
+                        ads_next_month += val
                     continue
-                
-                if day is None:
-                    continue
-                
-                for i, (ws, we) in enumerate(weeks):
-                    if ws <= day <= we:
-                        val = safe_float(row[col_ads_amt])
+
+                for i, (ws_range, we_range) in enumerate(weeks):
+                    if ws_range <= day <= we_range:
                         ads_weekly[i] += val
                         ws_ads.cell(row=7+idx, column=len(row)+1).value = f"W{i+1}"
                         break
@@ -325,21 +347,6 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         # Map ads to their respective weeks
                         ws_final.cell(row=r, column=4+i).value = -ads_weekly[i]
 
-        # Prepare Summary for AI
-        total_sales = sum(s['bill'] for s in weekly_stats.values()) * (100.0/105.0)
-        total_comm = sum(s['comm'] for s in weekly_stats.values()) * 1.18
-        total_ads = -sum(ads_weekly.values()) # Convert to positive expense
-        total_net = sum(s['net'] for s in weekly_stats.values())
-        
-        summary = {
-            "total_sales": round(total_sales, 2),
-            "total_commission": round(total_comm, 2),
-            "total_ad_spend": round(total_ads, 2),
-            "net_payout": round(total_net, 2),
-            "weekly_sales": [round(weekly_stats[i]['bill'] * (100.0/105.0), 2) for i in range(len(weeks))],
-            "adjustment_impact": round(adj_prev_month + ads_prev_month + adj_next_month + ads_next_month, 2)
-        }
-
         # Save and Cleanup
         output_filename = forced_filename if forced_filename else f"Zomato_Pay_Recon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         full_path = os.path.join(output_dir, output_filename)
@@ -352,8 +359,8 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
         
         if update_progress: update_progress(100)
         gc.collect()
-        return output_filename, summary, None
+        return output_filename, None
 
     except Exception as e:
         import traceback; traceback.print_exc()
-        return None, None, str(e)
+        return None, str(e)
