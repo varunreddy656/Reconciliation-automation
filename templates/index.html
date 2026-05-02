@@ -18,16 +18,27 @@
     <div class="aurora aurora-3"></div>
   </div>
 
-  <div id="splash-screen">
-    <div class="splash-bg">
-      <div class="splash-orb orb-1"></div>
-      <div class="splash-orb orb-2"></div>
+  <div id="splash-screen" class="cinematic-splash">
+    <div class="splash-bg-glass">
+      <div class="splash-glass-orb splash-glass-orb-1"></div>
+      <div class="splash-glass-orb splash-glass-orb-2"></div>
     </div>
-    <div class="splash-content">
-      <div class="splash-logo">AUTO RECONCILE</div>
-      <div class="splash-author">Varun Reddy</div>
-      <div class="loading-bar-container">
-        <div class="loading-bar-fill"></div>
+    <div class="splash-content-wrapper">
+      <div class="cinematic-text-mask">
+        <h1 class="splash-title">AUTO RECONCILE</h1>
+      </div>
+
+    </div>
+    
+    <div class="splash-bottom-bar">
+      <div class="cinematic-text-mask">
+        <div class="splash-author-cinematic">Varun Reddy.</div>
+      </div>
+      <div class="splash-progress-wrapper">
+        <div class="splash-line-container">
+          <div class="splash-line-fill"></div>
+        </div>
+        <span class="splash-percent" id="splash-percent">0%</span>
       </div>
     </div>
   </div>
@@ -57,10 +68,24 @@
             <span></span> Paytm
           </button>
         </nav>
+        
+        <div class="sidebar-tools" style="margin-top: 20px; padding: 0 20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+          <div style="font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.2em; margin-bottom: 15px; padding-left: 10px;">Global Tools</div>
+          <button class="nav-btn pos-trigger" onclick="openPosModal()" style="width: 100%; background: rgba(226, 176, 76, 0.05); border: 1px solid rgba(226, 176, 76, 0.2); color: var(--gold); border-radius: 12px; height: 40px; justify-content: center; font-size: 0.75rem;">
+            <span style="background: var(--gold); box-shadow: 0 0 10px var(--gold);"></span> GET POS VALUES
+          </button>
+        </div>
       </div>
       <div class="sidebar-footer">
-        Built by Varun Reddy
+        <button class="feedback-trigger" onclick="openFeedbackModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 18.57 18.57 0 0 0 1.8 1.5l3.5 1.5L21 11.5z"></path>
+          </svg>
+          Feedback/Suggestions
+        </button>
+        <div class="sidebar-watermark">BUILT BY VARUN REDDY</div>
       </div>
+
     </aside>
 
     <!-- Main Content Area -->
@@ -128,14 +153,34 @@
               </div>
             </div>
 
-            <div class="input-container" style="margin-top: 30px;">
-              <label class="input-label">Transaction Invoices (.xlsx)</label>
-              <div class="drop-zone" id="dropZone">
-                <div class="drop-zone-title">Drop Files</div>
-                <div class="drop-zone-hint">Support for multiple weekly invoices</div>
-                <input type="file" id="invoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+            <div class="form-grid" style="margin-top:30px;">
+              <div class="input-container">
+                <label class="input-label">Transaction Invoices (.xlsx)</label>
+                <div class="drop-zone" id="dropZone" style="height: 180px;">
+                  <div class="drop-zone-title">Drop Files</div>
+                  <div class="drop-zone-hint">Support for multiple weekly invoices</div>
+                  <input type="file" id="invoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
+                </div>
+                <div id="fileList" class="file-chips-container"></div>
               </div>
-              <div id="fileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+              <div class="input-container">
+                <label class="input-label">
+                  Bank Statement <span style="font-size: 0.75rem; color: var(--gold); opacity: 0.8;">(.xlsx only)</span>
+                  <div class="info-btn" style="display: inline-flex; vertical-align: middle; margin-left: 5px;">
+                    i
+                    <div class="tooltip-content" style="width: 400px; right: -10px; left: auto; transform: none; top: 150%; bottom: auto;">
+                      <p><strong>IMPORTANT:</strong> Bank data MUST start from the very first row (Row 1). See format below:</p>
+                      <img src="/static/img/bank_example.png" alt="Bank Format Example" style="width: 100%; border-radius: 4px; margin-top: 10px;">
+                    </div>
+                  </div>
+                </label>
+                <div class="drop-zone" id="zomatoBankDropZone" style="height: 180px;">
+                  <div class="drop-zone-title">Attach Bank Data</div>
+                  <div class="drop-zone-hint">Strictly .xlsx format only</div>
+                  <input type="file" id="zomatoBankFile" name="bankFile" accept=".xlsx" hidden>
+                </div>
+                <div id="zomatoBankFileList" class="file-chips-container"></div>
+              </div>
             </div>
 
             <div class="submit-container">
@@ -147,6 +192,7 @@
             <h3>RECONCILIATION COMPLETE</h3>
             <a id="downloadLink" href="#" class="download-link">DOWNLOAD GENERATED FILE</a>
           </div>
+
         </div>
       </section>
 
@@ -210,16 +256,25 @@
                   <div class="drop-zone-title">Drop Weekly Files</div>
                   <input type="file" id="swiggyInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
                 </div>
-                <div id="swiggyFileList" style="margin-top:10px; font-size: 0.7rem; color: rgba(255,255,255,0.3);">
-                </div>
+                <div id="swiggyFileList" class="file-chips-container"></div>
               </div>
               <div class="input-container">
-                <label class="input-label">Bank Statement (Opt.)</label>
+                <label class="input-label">
+                  Bank Statement <span style="font-size: 0.75rem; color: var(--gold); opacity: 0.8;">(.xlsx only)</span>
+                  <div class="info-btn" style="display: inline-flex; vertical-align: middle; margin-left: 5px;">
+                    i
+                    <div class="tooltip-content" style="width: 400px; right: -10px; left: auto; transform: none; top: 150%; bottom: auto;">
+                      <p><strong>IMPORTANT:</strong> Bank data MUST start from the very first row (Row 1). See format below:</p>
+                      <img src="/static/img/bank_example.png" alt="Bank Format Example" style="width: 100%; border-radius: 4px; margin-top: 10px;">
+                    </div>
+                  </div>
+                </label>
                 <div class="drop-zone" id="bankDropZone" style="height: 180px;">
                   <div class="drop-zone-title">Attach Bank Data</div>
-                  <input type="file" id="bankFileInput" name="bankFile" accept=".xls,.xlsx" hidden>
+                  <div class="drop-zone-hint">Strictly .xlsx format only</div>
+                  <input type="file" id="bankFileInput" name="bankFile" accept=".xlsx" hidden>
                 </div>
-                <div id="bankFileList" style="margin-top:10px; font-size: 0.7rem; color: rgba(255,255,255,0.3);"></div>
+                <div id="bankFileList" class="file-chips-container"></div>
               </div>
             </div>
 
@@ -275,7 +330,7 @@
                 <div class="drop-zone-hint">Support for multiple invoices</div>
                 <input type="file" id="dineoutInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
               </div>
-              <div id="dineoutFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+              <div id="dineoutFileList" class="file-chips-container"></div>
             </div>
 
             <div class="submit-container">
@@ -349,7 +404,7 @@
                 <div class="drop-zone-hint">Integrated Zomato Pay Export</div>
                 <input type="file" id="zpayInvoices" name="invoices" multiple accept=".xls,.xlsx" hidden>
               </div>
-              <div id="zpayFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+              <div id="zpayFileList" class="file-chips-container"></div>
             </div>
 
             <div class="submit-container">
@@ -423,7 +478,7 @@
                 <div class="drop-zone-hint">Support for single consolidated file</div>
                 <input type="file" id="paytmInvoices" name="invoices" multiple accept=".xls,.xlsx,.csv" hidden>
               </div>
-              <div id="paytmFileList" style="margin-top:20px; font-size: 0.8rem; color: rgba(255,255,255,0.3);"></div>
+              <div id="paytmFileList" class="file-chips-container"></div>
             </div>
 
             <div class="submit-container">
@@ -439,6 +494,131 @@
       </section>
 
     </main>
+
+    <!-- Global POS Results Modal/Panel -->
+    <div id="global-pos-overlay" class="pos-overlay">
+      <div class="pos-modal">
+        <div class="pos-modal-header">
+          <div>
+            <h2 id="pos-modal-title">POS DATA EXTRACTION</h2>
+            <p id="pos-modal-subtitle">Currently optimized for Petpooja POS reports</p>
+          </div>
+          <button class="close-modal-btn" onclick="closePosResult()">&times;</button>
+        </div>
+        
+        <!-- STEP 1: INPUT SECTION -->
+        <div id="pos-input-section" class="pos-form-container">
+          <div style="background: rgba(226, 176, 76, 0.1); border: 1px solid rgba(226, 176, 76, 0.3); border-radius: 8px; padding: 12px 15px; margin-bottom: 25px; font-size: 0.8rem; color: var(--gold); display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">⚠️</span>
+            <span><strong>System Notice:</strong> This tool currently supports <strong>Petpooja 'Order Report: Payment Wise'</strong> only. Posist and other POS support is coming soon.</span>
+          </div>
+          <div class="pos-input-group full-width" style="margin-bottom: 30px;">
+            <label>POS SOURCE EXCEL (Petpooja Only)</label>
+            <div class="pos-file-drop" onclick="document.getElementById('pos-file-input').click()">
+              <input type="file" id="pos-file-input" style="display: none;" onchange="updatePosFileName(this)">
+              <div class="drop-info">
+                <span id="pos-file-name">DROP FILE HERE OR CLICK TO BROWSE</span>
+                <small>Required: Petpooja 'Order Report: Payment Wise' (Excel format)</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-date-config">
+            <div class="pos-date-row">
+              <div class="pos-row-label">GLOBAL WEEKS <span>(Zomato / Dine-In / Card)</span></div>
+              <div class="pos-range-container">
+                <div class="pos-range-box">
+                  <label>First Week Range</label>
+                  <input type="text" id="pos_global_f_range" class="pos-date-input range-picker" placeholder="Select Start to End">
+                </div>
+                <div class="pos-range-box">
+                  <label>Last Week Range</label>
+                  <input type="text" id="pos_global_l_range" class="pos-date-input range-picker" placeholder="Select Start to End">
+                </div>
+              </div>
+            </div>
+
+            <div class="pos-date-row" style="margin-top: 25px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 25px;">
+              <div class="pos-row-label">SWIGGY WEEKS <span>(Monday to Sunday logic)</span></div>
+              <div class="pos-range-container">
+                <div class="pos-range-box">
+                  <label>First Week Range</label>
+                  <input type="text" id="pos_swiggy_f_range" class="pos-date-input range-picker" placeholder="Select Start to End">
+                </div>
+                <div class="pos-range-box">
+                  <label>Last Week Range</label>
+                  <input type="text" id="pos_swiggy_l_range" class="pos-date-input range-picker" placeholder="Select Start to End">
+                </div>
+              </div>
+            </div>
+
+            <div class="pos-date-row" style="margin-top: 25px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 25px;">
+              <div class="pos-row-label">
+                SWIGGY DINEOUT / EAZYDINER <span>(Irregular Cycles)</span>
+                <div class="info-btn">
+                  i
+                  <div class="tooltip-content">
+                    <p>Screenshot Example Format:</p>
+                    <img src="/static/img/dinein_example.png" alt="Screenshot Example">
+                  </div>
+                </div>
+              </div>
+              <div class="pos-dineout-config">
+                <div class="dineout-upload-zone" id="dineout-drop-zone" onclick="document.getElementById('dineout-screenshot-input').click()" onmouseover="this.classList.add('paste-active')" onmouseout="this.classList.remove('paste-active')">
+                  <input type="file" id="dineout-screenshot-input" style="display: none;" accept="image/*" onchange="handleDineoutScreenshot(this)">
+                  <div class="dineout-upload-content">
+                    <span id="dineout-status-text">UPLOAD / PASTE SCREENSHOT</span>
+                    <small>Ctrl+V to paste or click to browse</small>
+                  </div>
+                </div>
+                <div id="dineout-detected-ranges" class="dineout-ranges-preview" style="display: none;">
+                  <!-- Detected ranges will appear here -->
+                </div>
+                <input type="hidden" id="custom_dinein_ranges_data">
+              </div>
+            </div>
+          </div>
+
+          <div class="pos-form-actions" style="margin-top: 40px;">
+            <button class="calculate-pos-btn" onclick="handlePosExtraction()">
+              <span>⚡</span> START POS CALCULATION
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 2: LOADING -->
+        <div id="pos-loading-global" style="display: none; text-align: center; padding: 60px;">
+          <div class="loader-spinner" style="margin: 0 auto 20px;"></div>
+          <p style="color: #fff; font-size: 1.1rem; font-weight: 500;">PROCESSING EXCEL...</p>
+          <p style="color: var(--text-dim); font-size: 0.9rem; margin-top: 10px;">Locating headers and summing weekly totals</p>
+        </div>
+
+        <!-- STEP 3: RESULTS -->
+        <div id="pos-result-wrapper-global" style="display: none;">
+          <div style="background: rgba(226, 176, 76, 0.1); border: 1px solid var(--gold); border-radius: 8px; padding: 10px 15px; margin-bottom: 20px; font-size: 0.8rem; color: var(--gold); display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.2rem;">ℹ️</span>
+            <span><strong>Notice:</strong> This tool is currently optimized <strong>ONLY for Petpooja POS</strong> reports. Support for POSist and other systems is currently under development.</span>
+          </div>
+          <div id="pos-active-ranges" class="pos-range-badge">
+            <span id="pos-range-info"></span>
+          </div>
+          <div id="pos-result-container-global" class="pos-table-wrapper">
+            <!-- Table will be rendered here -->
+          </div>
+          <div class="pos-actions">
+            <div class="pos-type-badge" id="pos-detected-badge" style="font-size: 0.65rem; padding: 6px 12px; max-width: 200px; text-align: left; line-height: 1.2;">WORKS ONLY FOR PETPOOJA NOW BUT WILL IMPROVE IT TO WORK FOR OTHER POS'S AND CHANNELS</div>
+            <div style="display: flex; gap: 12px;">
+              <button class="action-btn" onclick="copyPosTable()">
+                <span>📋</span> COPY TABLE
+              </button>
+              <a id="pos-download-btn-global" href="#" class="action-btn download-btn">
+                <span>📊</span> DOWNLOAD EXCEL
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Generating Overlay with Gradient Blur -->
@@ -449,13 +629,33 @@
     <div class="loading-orb loading-orb-1"></div>
     <div class="loading-orb loading-orb-2"></div>
 
-    <!-- Loading Spinner -->
-    <div class="loader-spinner"></div>
-
     <div
       style="font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 600; color: white; letter-spacing: 0.2em; margin-top: 30px; text-shadow: 0 0 20px rgba(255,255,255,0.3);">
       GENERATING...</div>
+
+    <!-- Live Progress Steps -->
+    <div class="progress-list" id="progressList">
+      <div class="progress-step" id="step1">
+        <div class="step-dot"></div>
+        <div class="step-text">Reading Input Files</div>
+      </div>
+      <div class="progress-step" id="step2">
+        <div class="step-dot"></div>
+        <div class="step-text">Processing Calculations</div>
+      </div>
+      <div class="progress-step" id="step3">
+        <div class="step-dot"></div>
+        <div class="step-text">Mapping to Template</div>
+      </div>
+      <div class="progress-step" id="step4">
+        <div class="step-dot"></div>
+        <div class="step-text">Finalizing Excel Report</div>
+      </div>
+    </div>
   </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
 
   <style>
     .loading-orb {
@@ -537,20 +737,40 @@
   <script>
     // --- SPLASH SCREEN LOGIC ---
     window.addEventListener('load', () => {
-      // Ensure the container is ready behind the scenes
       const container = document.getElementById('app-container');
+      const splash = document.getElementById('splash-screen');
+      const percentEl = document.getElementById('splash-percent');
+      const lineFill = document.querySelector('.splash-line-fill');
+      
       container.style.display = 'flex';
 
+      // Cinematic Progress Animation
+      let progress = 0;
+      const duration = 1000; // 1 second loading phase
+      const intervalTime = 20;
+      const steps = duration / intervalTime;
+      const increment = 100 / steps;
+
       setTimeout(() => {
-        const splash = document.getElementById('splash-screen');
-
-        // Circular exit animation
-        splash.style.clipPath = 'circle(0% at 50% 50%)';
-
-        setTimeout(() => {
-          splash.style.display = 'none';
-        }, 1500);
-      }, 4000);
+        const progressInterval = setInterval(() => {
+          progress += increment;
+          if (progress >= 100) {
+            progress = 100;
+            clearInterval(progressInterval);
+            
+            // Wait a moment after reaching 100% then slide up
+            setTimeout(() => {
+              splash.classList.add('hidden');
+              setTimeout(() => {
+                splash.style.display = 'none';
+                container.style.opacity = '1';
+              }, 800); // Wait for transform animation to finish
+            }, 200);
+          }
+          percentEl.innerText = Math.floor(progress) + '%';
+          lineFill.style.width = progress + '%';
+        }, intervalTime);
+      }, 300); // Start progress after initial text reveals
     });
 
     // --- TAB SWITCHING ---
@@ -625,12 +845,36 @@
     function updateFileList(input, listElement) {
       if (!listElement) return;
       listElement.innerHTML = '';
-      if (input.files.length > 0) {
-        listElement.textContent = `${input.files.length} file(s) ready for processing`;
+      if (!input.files || input.files.length === 0) return;
+
+      Array.from(input.files).forEach((file, index) => {
+        const chip = document.createElement('div');
+        chip.className = 'file-chip';
+        chip.innerHTML = `
+          <span>${file.name}</span>
+          <span class="remove-file" onclick="removeFile('${input.id}', ${index})">&times;</span>
+        `;
+        listElement.appendChild(chip);
+      });
+    }
+
+    function removeFile(inputId, index) {
+      const input = document.getElementById(inputId);
+      const dt = new DataTransfer();
+      const { files } = input;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (index !== i) dt.items.add(file);
       }
+
+      input.files = dt.files;
+      // Trigger change to update UI
+      input.dispatchEvent(new Event('change'));
     }
 
     setupFileUpload('dropZone', 'invoices', 'fileList');
+    setupFileUpload('zomatoBankDropZone', 'zomatoBankFile', 'zomatoBankFileList');
     setupFileUpload('swiggyDropZone', 'swiggyInvoices', 'swiggyFileList');
     setupFileUpload('bankDropZone', 'bankFileInput', 'bankFileList');
     setupFileUpload('dineoutDropZone', 'dineoutInvoices', 'dineoutFileList');
@@ -675,6 +919,10 @@
 
     // DATE PICKER SETUP
     function setupDatePicker(displayId, startId, endId) {
+      if (typeof flatpickr === 'undefined') {
+        console.warn('Flatpickr not loaded yet.');
+        return;
+      }
       const display = document.getElementById(displayId);
       const startInput = document.getElementById(startId);
       const endInput = document.getElementById(endId);
@@ -728,48 +976,97 @@
     setupDatePicker('paytmFirstWeekDisplay', 'paytmFirstWeekStart', 'paytmFirstWeekEnd');
     setupDatePicker('paytmLastWeekDisplay', 'paytmLastWeekStart', 'paytmLastWeekEnd');
 
+    // --- TOAST NOTIFICATIONS ---
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `
+        <div style="flex: 1">${message}</div>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 600);
+      }, 4000);
+    }
+
+    // --- PROGRESS TRACKING ---
+    function updateProgressUI(percentage) {
+      document.querySelectorAll('.progress-step').forEach(step => step.classList.remove('active', 'done'));
+
+      if (percentage >= 100) {
+        document.querySelectorAll('.progress-step').forEach(step => step.classList.add('done'));
+      } else if (percentage >= 80) {
+        document.getElementById('step4').classList.add('active');
+        ['step1', 'step2', 'step3'].forEach(id => document.getElementById(id).classList.add('done'));
+      } else if (percentage >= 50) {
+        document.getElementById('step3').classList.add('active');
+        ['step1', 'step2'].forEach(id => document.getElementById(id).classList.add('done'));
+      } else if (percentage >= 20) {
+        document.getElementById('step2').classList.add('active');
+        document.getElementById('step1').classList.add('done');
+      } else if (percentage >= 5) {
+        document.getElementById('step1').classList.add('active');
+      }
+    }
+
+    async function pollProgress(taskId) {
+      if (!taskId) return;
+      try {
+        const response = await fetch(`/progress/${taskId}`);
+        const data = await response.json();
+        if (data.progress !== undefined) {
+          updateProgressUI(data.progress);
+          if (data.progress < 100) {
+            setTimeout(() => pollProgress(taskId), 800);
+          }
+        }
+      } catch (e) { }
+    }
+
     // --- FORM HANDLING ---
     async function handleFormSubmit(e, apiEndpoint, resultId, downloadLinkId) {
       e.preventDefault();
       const form = e.target;
       const overlay = document.getElementById('loadingOverlay');
 
+      // Reset progress UI
+      updateProgressUI(0);
+
+      // Generate a task ID
+      const taskId = 'task_' + Date.now();
+      const formData = new FormData(form);
+      formData.append('task_id', taskId);
+
       overlay.style.display = 'flex';
+      pollProgress(taskId);
 
       try {
-        const response = await fetch(apiEndpoint, { method: 'POST', body: new FormData(form) });
+        const response = await fetch(apiEndpoint, { method: 'POST', body: formData });
         let result;
         try {
           result = await response.json();
         } catch (jsonErr) {
-          throw new Error("Server returned non-JSON response. It might have crashed.");
+          throw new Error("Server returned non-JSON response.");
         }
 
         overlay.style.display = 'none';
 
         if (response.ok && result.success) {
+          showToast(result.message || 'Processing complete!', 'success');
           const resDiv = document.getElementById(resultId);
           const dlLink = document.getElementById(downloadLinkId);
           resDiv.style.display = 'block';
           dlLink.href = `/download/${result.filename || result.download_url.split('/').pop()}`;
           resDiv.scrollIntoView({ behavior: 'smooth' });
         } else {
-          alert('Error: ' + (result.message || 'Processing failed on server'));
+          showToast(result.message || 'Processing failed', 'error');
         }
       } catch (err) {
         overlay.style.display = 'none';
-        console.error("Submission Error:", err);
-
-        // Try to get more info if it's a server error
-        let errorMsg = err.message || "Unknown error";
-        try {
-          // If we can't fetch, maybe the server is down
-          if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-            errorMsg = "Server connection lost. Please check if the local server is running.";
-          }
-        } catch (e) { }
-
-        alert('Transmission Failure: ' + errorMsg);
+        showToast('Transmission Failure: ' + err.message, 'error');
       }
     }
 
@@ -779,7 +1076,401 @@
     document.getElementById('zomatoPayUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/zomato-pay', 'zpayResult', 'zpayDownloadLink'));
     document.getElementById('paytmUploadForm').addEventListener('submit', (e) => handleFormSubmit(e, '/upload/paytm', 'paytmResult', 'paytmDownloadLink'));
 
+    // --- POS EXTRACTION LOGIC ---
+    function initPosPickers() {
+      flatpickr(".range-picker", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        allowInput: true,
+        altInput: true,
+        altFormat: "F j, Y",
+        theme: "dark"
+      });
+    }
+
+    function openPosModal() {
+      // Reset interface
+      document.getElementById('pos-input-section').style.display = 'block';
+      document.getElementById('pos-loading-global').style.display = 'none';
+      document.getElementById('pos-result-wrapper-global').style.display = 'none';
+      document.getElementById('pos-file-name').textContent = 'DROP FILE HERE OR CLICK TO BROWSE';
+      
+      document.getElementById('global-pos-overlay').style.display = 'flex';
+      setTimeout(() => {
+        document.getElementById('global-pos-overlay').classList.add('active');
+        initPosPickers();
+      }, 10);
+    }
+
+    function closePosResult() {
+      const overlay = document.getElementById('global-pos-overlay');
+      overlay.classList.remove('active');
+      setTimeout(() => {
+        overlay.style.display = 'none';
+      }, 500);
+    }
+
+    function updatePosFileName(input) {
+      if (input.files && input.files[0]) {
+        document.getElementById('pos-file-name').textContent = input.files[0].name;
+      }
+    }
+
+    // Drag and Drop Logic for POS
+    const posDropZone = document.querySelector('.pos-file-drop');
+    if (posDropZone) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        posDropZone.addEventListener(eventName, e => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        posDropZone.addEventListener(eventName, () => posDropZone.classList.add('drag-active'), false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        posDropZone.addEventListener(eventName, () => posDropZone.classList.remove('drag-active'), false);
+      });
+
+      posDropZone.addEventListener('drop', e => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        const fileInput = document.getElementById('pos-file-input');
+        fileInput.files = files;
+        updatePosFileName(fileInput);
+      }, false);
+    }
+
+    async function handleDineoutScreenshot(input) {
+      if (!input.files || !input.files[0]) return;
+      
+      const file = input.files[0];
+      const statusText = document.getElementById('dineout-status-text');
+      const previewZone = document.getElementById('dineout-detected-ranges');
+      
+      statusText.innerHTML = '⚡ AI IS READING SCREENSHOT...';
+      statusText.parentElement.style.opacity = '0.7';
+      
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      try {
+        const response = await fetch('/parse-pos-structure', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        if (result.ranges) {
+          document.getElementById('custom_dinein_ranges_data').value = JSON.stringify(result.ranges);
+          statusText.innerHTML = '✅ STRUCTURE READ SUCCESSFULLY';
+          
+          previewZone.innerHTML = '';
+          result.ranges.forEach(r => {
+            const badge = document.createElement('div');
+            badge.className = 'dineout-period-badge';
+            badge.textContent = r.label;
+            previewZone.appendChild(badge);
+          });
+          previewZone.style.display = 'flex';
+          showToast('AI successfully extracted ' + result.ranges.length + ' periods');
+        } else {
+          throw new Error(result.error || 'Failed to parse');
+        }
+      } catch (err) {
+        console.error(err);
+        statusText.innerHTML = '❌ ERROR: COULD NOT READ IMAGE';
+        showToast('Error: Ensure GROQ_API_KEY is set in environment', 'error');
+      } finally {
+        statusText.parentElement.style.opacity = '1';
+      }
+    }
+
+    // Clipboard Paste Logic for Dineout
+    window.addEventListener('paste', e => {
+      const modal = document.getElementById('global-pos-overlay');
+      if (!modal.classList.contains('active')) return;
+
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          
+          const fileInput = document.getElementById('dineout-screenshot-input');
+          fileInput.files = dataTransfer.files;
+          handleDineoutScreenshot(fileInput);
+          break;
+        }
+      }
+    });
+
+    async function handlePosExtraction() {
+      const fileInput = document.getElementById('pos-file-input');
+      if (!fileInput.files || !fileInput.files[0]) {
+        showToast('Please select a POS Excel file first', 'error');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      // Global Ranges
+      const gF = document.getElementById('pos_global_f_range').value.split(' to ');
+      const gL = document.getElementById('pos_global_l_range').value.split(' to ');
+      
+      // Swiggy Ranges
+      const sF = document.getElementById('pos_swiggy_f_range').value.split(' to ');
+      const sL = document.getElementById('pos_swiggy_l_range').value.split(' to ');
+
+      const weekRanges = {
+        f_start: gF[0], f_end: gF[1],
+        l_start: gL[0], l_end: gL[1],
+        swiggy: {
+          f_start: sF[0], f_end: sF[1],
+          l_start: sL[0], l_end: sL[1]
+        }
+      };
+
+      formData.append('week_ranges', JSON.stringify(weekRanges));
+      
+      const customRanges = document.getElementById('custom_dinein_ranges_data').value;
+      if (customRanges) {
+        formData.append('custom_dinein_ranges', customRanges);
+      }
+
+      const fStart = gF[0], fEnd = gF[1], lStart = gL[0], lEnd = gL[1];
+      if (!fStart || !fEnd || !lStart || !lEnd) {
+        showToast('Please provide Global week ranges (Select both Start and End dates)', 'warning');
+        return;
+      }
+
+      const inputSection = document.getElementById('pos-input-section');
+      const loading = document.getElementById('pos-loading-global');
+      const resultWrapper = document.getElementById('pos-result-wrapper-global');
+      
+      inputSection.style.display = 'none';
+      loading.style.display = 'block';
+      resultWrapper.style.display = 'none';
+
+      try {
+        const response = await fetch('/extract-pos', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        loading.style.display = 'none';
+
+        if (result.success) {
+          document.getElementById('pos-detected-badge').textContent = `DETECTED: ${result.pos_type.toUpperCase()}`;
+          document.getElementById('pos-download-btn-global').href = result.download_url;
+          
+          document.getElementById('pos-range-info').textContent = 
+            `Global Week 1: ${fStart} to ${fEnd} | Week 5: ${lStart} to ${lEnd}`;
+
+          renderPosTable(result.data);
+          resultWrapper.style.display = 'block';
+          showToast('POS Data Calculated Successfully', 'success');
+        } else {
+          showToast(result.message || 'Extraction failed', 'error');
+          inputSection.style.display = 'block';
+        }
+      } catch (err) {
+        loading.style.display = 'none';
+        inputSection.style.display = 'block';
+        showToast('POS Error: ' + err.message, 'error');
+      }
+    }
+
+    function renderPosTable(data) {
+      const container = document.getElementById('pos-result-container-global');
+      container.innerHTML = '';
+      
+      const weeks = data.weeks;
+      const standardChannels = data.channels.filter(c => !c.is_custom);
+      const customChannels = data.channels.filter(c => c.is_custom);
+
+      // --- SECTION 1: STANDARD CHANNELS ---
+      if (standardChannels.length > 0) {
+        let html = `
+          <div class="pos-table-section">
+            <div class="pos-section-title">STANDARD WEEKLY SUMMARY</div>
+            <table class="pos-table" id="posTable">
+              <thead>
+                <tr>
+                  <th>CHANNEL</th>
+                  <th>METHOD</th>
+                  <th>STATUS</th>
+                  ${weeks.map(w => `<th>${w}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>`;
+
+        standardChannels.forEach(channel => {
+          channel.payment_methods.forEach((pm, pmIdx) => {
+            const statusLabel = pm.status_label || 'SUCCESS';
+            const statusClass = statusLabel.includes('CANCELLED') ? 'status-warning' : 'status-success';
+            
+            html += `<tr>`;
+            if (pmIdx === 0) {
+              html += `<td rowspan="${channel.payment_methods.length}" class="channel-name-cell">${channel.name}</td>`;
+            }
+            html += `<td class="method-cell">${pm.method}</td>`;
+            html += `<td><span class="status-badge ${statusClass}">${statusLabel}</span></td>`;
+            
+            weeks.forEach(w => {
+              const val = pm.data[w] ? pm.data[w].value : 0;
+              html += `<td class="amount-cell ${val > 0 ? 'has-value' : 'zero-value'}">
+                ₹${val.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+              </td>`;
+            });
+            html += `</tr>`;
+          });
+        });
+        
+        html += `</tbody></table></div>`;
+        container.innerHTML += html;
+      }
+
+      // --- SECTION 2: CUSTOM CHANNELS ---
+      customChannels.forEach(channel => {
+        const periods = channel.periods;
+        let html = `
+          <div class="pos-table-section" style="margin-top: 40px;">
+            <div class="pos-section-title">${channel.name.toUpperCase()} (AI-EXTRACTED PERIODS)</div>
+            <div style="overflow-x: auto;">
+              <table class="pos-table">
+                <thead>
+                  <tr>
+                    <th>METHOD</th>
+                    <th>STATUS</th>
+                    ${periods.map(p => `<th>${p}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>`;
+
+        channel.payment_methods.forEach(pm => {
+          html += `<tr>
+            <td class="method-cell">${pm.method}</td>
+            <td><span class="status-badge status-success">SUCCESS</span></td>
+            ${periods.map(p => {
+              const val = pm.data[p] ? pm.data[p].value : 0;
+              return `<td class="amount-cell ${val > 0 ? 'has-value' : 'zero-value'}">
+                ₹${val.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+              </td>`;
+            }).join('')}
+          </tr>`;
+        });
+
+        html += `</tbody></table></div></div>`;
+        container.innerHTML += html;
+      });
+    }
+
+    function copyPosTable() {
+      const table = document.getElementById('posTable');
+      if (!table) return;
+
+      const range = document.createRange();
+      range.selectNode(table);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+
+      try {
+        document.execCommand('copy');
+        showToast('Table copied to clipboard!', 'success');
+      } catch (err) {
+        showToast('Failed to copy', 'error');
+      }
+      window.getSelection().removeAllRanges();
+    }
+
+  </script>
+  <!-- Feedback Modal -->
+  <div class="feedback-overlay" id="feedbackOverlay">
+    <div class="feedback-modal">
+      <div class="feedback-header">
+        <div>
+          <h2>Feedback/Suggestions</h2>
+          <p>Your messages are 100% anonymous</p>
+        </div>
+        <button class="close-modal-btn" onclick="closeFeedbackModal()">&times;</button>
+      </div>
+      
+      <form id="feedbackForm" action="https://formspree.io/f/mnjwnwdn" method="POST">
+        <div class="input-group">
+          <label class="input-label">Your Message</label>
+          <textarea name="message" class="feedback-textarea" placeholder="Describe the feature you want or an improvement we can make..." required></textarea>
+        </div>
+        
+        <div class="feedback-actions">
+          <button type="submit" class="luxury-submit" id="sendFeedbackBtn">
+            SEND FEEDBACK
+          </button>
+        </div>
+      </form>
+      
+      <div id="feedbackSuccess" class="feedback-success-msg" style="display: none;">
+        <div class="success-icon">✓</div>
+        <h3>Thank You!</h3>
+        <p>Your feedback has been received and will be reviewed shortly.</p>
+        <button class="luxury-submit" onclick="closeFeedbackModal()" style="margin-top: 20px;">BACK TO DASHBOARD</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- FEEDBACK MODAL LOGIC ---
+    function openFeedbackModal() {
+      document.getElementById('feedbackOverlay').classList.add('active');
+    }
+
+    function closeFeedbackModal() {
+      document.getElementById('feedbackOverlay').classList.remove('active');
+      // Reset form state
+      setTimeout(() => {
+        document.getElementById('feedbackForm').style.display = 'block';
+        document.getElementById('feedbackSuccess').style.display = 'none';
+        document.getElementById('feedbackForm').reset();
+      }, 300);
+    }
+
+    // Handle Formspree AJAX submission
+    document.getElementById('feedbackForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const btn = document.getElementById('sendFeedbackBtn');
+      const originalText = btn.innerHTML;
+      
+      btn.disabled = true;
+      btn.innerHTML = 'SENDING...';
+      
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: new FormData(form),
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          form.style.display = 'none';
+          document.getElementById('feedbackSuccess').style.display = 'flex';
+        } else {
+          alert('Oops! There was a problem submitting your form');
+        }
+      } catch (error) {
+        alert('Error connecting to the feedback service.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
   </script>
 </body>
-
 </html>

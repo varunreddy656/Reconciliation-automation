@@ -105,6 +105,7 @@ def process_zomato_consolidated(
     first_week_end=None,
     last_week_start=None,
     last_week_end=None,
+    bank_file_path=None,
     progress_callback=None
 ):
     """
@@ -188,9 +189,10 @@ def process_zomato_consolidated(
 
                 map_commissionable_value_to_summary(summary_sheet, d1, week_num)
         
-        # 5. Process Ads Segregation
-        print("\n📢 Processing Ads Segregation...")
+        # 5. Process Ads & Hyperpure Segregation
+        print("\n📢 Processing Ads & Hyperpure Segregation...")
         ads_weekly_totals = {w['week_num']: 0.0 for w in week_structure}
+        hyperpure_weekly_totals = {w['week_num']: 0.0 for w in week_structure}
         
         src_ads = None
         for sn in ["Addition Deductions Details", "Addition Deductions", "Deductions"]:
@@ -226,28 +228,30 @@ def process_zomato_consolidated(
                         if "total amount" in h: total_col = idx
                     continue
                 
-                # Process ADS rows
-                if current_section in ["ADDITION", "DEDUCTION"] and type_col != -1:
+                # Process ADS and Hyperpure rows
+                if current_section in ["ADDITION", "DEDUCTION", "OTHER"] and type_col != -1:
                     type_val = str(src_ads.cell(row=row, column=type_col).value or "").strip().upper()
-                    if type_val == "ADS":
-                        period_val = src_ads.cell(row=row, column=period_col).value
-                        amount = safe_float(src_ads.cell(row=row, column=total_col).value)
+                    period_val = src_ads.cell(row=row, column=period_col).value
+                    amount = safe_float(src_ads.cell(row=row, column=total_col).value)
+                    
+                    if amount == 0: continue
                         
-                        # Use deduction period if available, else try to find any date in the row
-                        p_start, p_end = parse_deduction_period(period_val)
-                        if not p_start:
-                            # Fallback: maybe it's a simple date
-                            try:
-                                dt = parse(period_val).date()
-                                p_start, p_end = dt, dt
-                            except: pass
+                    # Use deduction period if available, else try to find any date in the row
+                    p_start, p_end = parse_deduction_period(period_val)
+                    if not p_start:
+                        # Fallback: maybe it's a simple date
+                        try:
+                            dt = parse(period_val).date()
+                            p_start, p_end = dt, dt
+                        except: pass
 
-                        if p_start:
-                            # Match to week
-                            matched = False
-                            for week in week_structure:
-                                ws, we = week['start_date'].date(), week['end_date'].date()
-                                if ws <= p_start <= we or (p_start <= ws and p_end >= we):
+                    if p_start:
+                        # Match to week
+                        matched = False
+                        for week in week_structure:
+                            ws, we = week['start_date'].date(), week['end_date'].date()
+                            if ws <= p_start <= we or (p_start <= ws and p_end >= we):
+                                if (type_val == "ADS"):
                                     # DEDUCT if in Addition section, ADD if in Deduction section
                                     if current_section == "ADDITION":
                                         ads_weekly_totals[week['week_num']] -= amount
@@ -255,10 +259,15 @@ def process_zomato_consolidated(
                                     else:
                                         ads_weekly_totals[week['week_num']] += amount
                                         print(f"  ➕ Added Deduction Ad: {amount} for Week {week['week_num']}")
-                                    matched = True
-                                    break
-                            if not matched:
-                                print(f"  ⚠️ Could not match Ad period '{period_val}' to any week")
+                                elif "HYPERPURE" in type_val or current_section == "OTHER":
+                                    # Handle Hyperpure
+                                    hyperpure_weekly_totals[week['week_num']] += amount
+                                    print(f"  🥦 Added Hyperpure: {amount} for Week {week['week_num']}")
+                                
+                                matched = True
+                                break
+                        if not matched:
+                            print(f"  ⚠️ Could not match Ad period '{period_val}' to any week")
             
             
         else:
@@ -281,24 +290,37 @@ def process_zomato_consolidated(
                             print(f"  ✅ Week {wn} Extra Ads: {val} (Total Ads now: {ads_weekly_totals[wn]})")
                         break
 
-        # 7. Map Ads to Cashflow
-        if "Cashflow" in recon.sheetnames:
-            cashflow = recon["Cashflow"]
-            high_priority_row = -1
-            for r in range(1, cashflow.max_row + 1):
-                label = str(cashflow.cell(row=r, column=2).value or "").strip().lower()
-                if label == "high priority":
-                    high_priority_row = r
-                    break
-            
-            if high_priority_row != -1:
-                for week_num, total in ads_weekly_totals.items():
-                    col = 3 + (week_num - 1)
-                    # For consolidated, we set the value directly
-                    cashflow.cell(row=high_priority_row, column=col).value = total
-                    print(f"  ✅ Week {week_num} Final Ads: {total} → Cashflow[{high_priority_row}, {col}]")
-            else:
-                print("  ⚠️ 'High Priority' label not found in Cashflow sheet")
+            # 7. Map Ads & Hyperpure to Cashflow
+            if "Cashflow" in recon.sheetnames:
+                cashflow = recon["Cashflow"]
+                high_priority_row = -1
+                hyperpure_row = -1
+
+                for r in range(1, cashflow.max_row + 1):
+                    label = str(cashflow.cell(row=r, column=2).value or "").strip().lower()
+                    if label == "high priority":
+                        high_priority_row = r
+                    elif "hyperpure" in label:
+                        hyperpure_row = r
+                
+                # Map Ads
+                if high_priority_row != -1:
+                    for week_num, total in ads_weekly_totals.items():
+                        col = 3 + (week_num - 1)
+                        cashflow.cell(row=high_priority_row, column=col).value = total
+                        print(f"  ✅ Week {week_num} Final Ads: {total} → Cashflow[{high_priority_row}, {col}]")
+                else:
+                    print("  ⚠️ 'High Priority' label not found in Cashflow sheet")
+
+                # Map Hyperpure
+                if hyperpure_row != -1:
+                    for week_num, total in hyperpure_weekly_totals.items():
+                        col = 3 + (week_num - 1)
+                        if total != 0:
+                            cashflow.cell(row=hyperpure_row, column=col).value = total
+                            print(f"  ✅ Week {week_num} Hyperpure: {total} → Cashflow[{hyperpure_row}, {col}]")
+                else:
+                    print("  ⚠️ 'Hyperpure' related label not found in Cashflow sheet")
 
         # 7. Finalize
         replace_month_in_sheets(recon, month)
