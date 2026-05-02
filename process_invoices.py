@@ -779,6 +779,7 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
             print(f"  Col {col_num}: '{header}'")
     print()
 
+    total_mapped_value = 0
     for row in range(1, cashflow.max_row + 1):
         label = str(cashflow.cell(row=row, column=2).value or "").strip()
         if not label or label not in ZOMATO_MAPPING:
@@ -833,8 +834,30 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
 
         if formula:
             cashflow.cell(row=row, column=week_col).value = formula
+            
+            # Calculate numeric value for notepoint logic
+            try:
+                row_sum = 0
+                if operation == "single":
+                    row_sum = data_cells[0].value or 0
+                elif operation == "sum":
+                    row_sum = sum(c.value or 0 for c in data_cells)
+                elif operation == "sub":
+                    row_sum = (data_cells[0].value or 0) - sum(c.value or 0 for c in data_cells[1:])
+                elif label == "Long Distance Fee":
+                    fee_val = data1_sheet.cell(row=data_row, column=fee_cols[0]).value or 0
+                    discount_val = 0
+                    if discount_cols:
+                        discount_val = data1_sheet.cell(row=data_row, column=discount_cols[0]).value or 0
+                    row_sum = fee_val - discount_val
+                
+                total_mapped_value += row_sum
+            except:
+                pass
+            
             print(f"✅ Mapped '{label}' to Cashflow col {week_col}: {formula}")
 
+    return total_mapped_value
 
 def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
     """Map D2W data to Cashflow sheet"""
@@ -854,7 +877,8 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
     }
 
     print(f"\n🔍 D2W MAPPING - Scanning sheet '{d2_sheet.title}'...")
-
+    total_d2w_mapped = 0
+    
     # Find D1W sheet if it exists
     d1_sheet = None
     d1_sheet_name = d2_sheet.title.replace("D2W", "D1W")
@@ -929,9 +953,31 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
 
                     cashflow.cell(row=cf_row, column=week_col).value = formula
                     print(f"  ✅ Mapped {cashflow_label} for Week {week}: {formula}")
+                    
+                    # Track numeric value for notepoint logic
+                    try:
+                        v = 0
+                        if found_value and isinstance(found_value, (int, float)):
+                            v += found_value
+                        if addition_row:
+                            add_val = d2_sheet[f"{value_col}{addition_row}"].value
+                            if isinstance(add_val, (int, float)):
+                                v -= add_val
+                        # extra ads from formula part
+                        if extra_ads_formula_part:
+                            match = re.search(r'([A-Z]+)(\d+)', extra_ads_formula_part)
+                            if match and d1_sheet:
+                                ads_val = d1_sheet[f"{match.group(1)}{match.group(2)}"].value
+                                if isinstance(ads_val, (int, float)):
+                                    v += ads_val
+                        total_d2w_mapped += v
+                    except:
+                        pass
                     break
         else:
             print(f"  ❌ '{cashflow_label}' - No data found in D2W or D1W")
+
+    return total_d2w_mapped
 
 
 def map_commissionable_value_to_summary(summary_sheet, d1_sheet, week_num):
@@ -1052,12 +1098,175 @@ def copy_logos_between_workbooks(template_path, target_wb, sheet_names_to_copy=N
             print(f"\n⚠️  No logos copied - check template")
             return False
 
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
         return False
 
+def map_zomato_bank_to_actual_receipts(recon_wb, week_ctr_map):
+    if "BANK" not in recon_wb.sheetnames or "Cashflow" not in recon_wb.sheetnames:
+        print("BANK or Cashflow sheet missing; skipping bank mapping.")
+        return
+    bank_sheet = recon_wb["BANK"]
+    cashflow = recon_wb["Cashflow"]
+    
+    deposit_col = None
+    narration_col = None
+    
+    deposit_labels = ["deposit amt.", "credit amount(inr)", "credit", "deposit", "amount"]
+    narration_labels = ["narration", "description", "particulars"]
+    
+    for col in range(1, bank_sheet.max_column + 1):
+        header = str(bank_sheet.cell(row=1, column=col).value).lower().strip() if bank_sheet.cell(row=1, column=col).value else ""
+        for label in deposit_labels:
+            if label.lower() in header and deposit_col is None:
+                deposit_col = col
+        for label in narration_labels:
+            if label.lower() in header and narration_col is None:
+                narration_col = col
+                
+    if deposit_col is None or narration_col is None:
+        print(f"Could not find required bank columns. Deposit: {deposit_col}, Narration: {narration_col}")
+        return
+        
+    bank_data = []
+    print(f"\n🏦 --- STARTING ZOMATO BANK MAPPING ---")
+    for row in range(2, bank_sheet.max_row + 1):
+        narration = str(bank_sheet.cell(row=row, column=narration_col).value or "")
+        val = bank_sheet.cell(row=row, column=deposit_col).value
+        orig_val = val
+        if isinstance(val, str):
+            cleaned = val.replace(",", "").replace("\u200c", "").replace("₹", "").replace(" ", "")
+            cleaned = ''.join(c for c in cleaned if c.isdigit() or c == '.' or c == '-')
+            try:
+                val = float(cleaned)
+            except:
+                val = None
+        if isinstance(val, (int, float)) and val != 0:
+            bank_data.append((narration, val, row))
+            
+    print(f"  📊 Found {len(bank_data)} valid deposit rows in bank statement.")
+    if len(bank_data) > 0:
+        print("  🕵️‍♂️ Sample of first 3 Bank Narrations being scanned:")
+        for n, d, r in bank_data[:3]:
+            print(f"     Row {r} | Narration: {repr(n)} | Deposit: {d}")
+
+    for week, ctr_val in week_ctr_map.items():
+        col = 2 + week
+        print(f"\n  🔍 --- WEEK {week} BANK MAPPING ---")
+        if not ctr_val or str(ctr_val).strip() == "" or str(ctr_val).strip().lower() in ["none", "na", "n/a", "nan", "-"]:
+            print(f"    ❌ Invalid or Placeholder CTR value extracted: {repr(ctr_val)}. Setting row 38 col {col} to 0")
+            cashflow.cell(row=38, column=col).value = 0
+            continue
+            
+        ctr_str = str(ctr_val).strip().lower()
+        print(f"    🎯 Target CTR to search: {repr(ctr_str)}")
+        
+        found_deposit = None
+        
+        # We will keep track of partial matches for debugging
+        partial_matches = []
+        
+        for narration, deposit, row in bank_data:
+            narration_lower = narration.lower()
+            if ctr_str in narration_lower:
+                found_deposit = deposit
+                print(f"    ✅ EXACT MATCH FOUND at bank row {row}:")
+                print(f"       -> Narration: {repr(narration)}")
+                print(f"       -> Deposit: {deposit}")
+                break
+            
+            # Very basic partial match check for debugging (if CTR is > 5 chars, check first 5)
+            if len(ctr_str) > 5 and ctr_str[:5] in narration_lower:
+                partial_matches.append((row, narration))
+                
+        if found_deposit is not None:
+            cashflow.cell(row=38, column=col).value = found_deposit
+            print(f"    📝 Successfully mapped deposit {found_deposit} to Cashflow col {col}")
+        else:
+            cashflow.cell(row=38, column=col).value = 0
+            print(f"    ⚠️ No matching bank deposit found in Narration for CTR {repr(ctr_str)}")
+            if partial_matches:
+                print(f"    🔍 DEBUG: Found some partial matches (first 5 chars):")
+                for r, n in partial_matches[:3]:
+                    print(f"       Row {r}: {repr(n)}")
+            print(f"    📝 Setting Cashflow col {col} to 0")
+            
+    print(f"🏦 --- END ZOMATO BANK MAPPING ---\n")
+
+    print(f"Adding note: {note}")
+    cashflow.cell(row=42, column=2).value = note
+    if discrepancies:
+        discrepancies.cell(row=26, column=1).value = note
+
+def add_zomato_notepoints(recon_wb, num_weeks, has_bank, week_expected_map=None):
+    cashflow = recon_wb["Cashflow"]
+    discrepancies = recon_wb["Discrepancies"] if "Discrepancies" in recon_wb.sheetnames else None
+
+    # Clear prior notes
+    cashflow.cell(row=42, column=2).value = None
+    if discrepancies:
+        discrepancies.cell(row=26, column=1).value = None
+
+    def get_float(r, c):
+        v = cashflow.cell(row=r, column=c).value
+        try:
+            if isinstance(v, str):
+                v = v.replace(',', '').replace('₹', '').replace(' ', '').strip()
+            return float(v) if v is not None else 0.0
+        except:
+            return 0.0
+
+    unmapped_weeks = []
+    for week_idx in range(1, num_weeks + 1):
+        col = 2 + week_idx
+        actual_receipts = get_float(38, col)
+        
+        # Use pre-calculated expected balance if row 39 is a formula
+        balance_due = 0.0
+        if week_expected_map and week_idx in week_expected_map:
+            balance_due = week_expected_map[week_idx]
+        else:
+            balance_due = get_float(39, col)
+        
+        print(f"🔍 Week {week_idx} Logic Check: Receipts={actual_receipts}, Expected Balance={balance_due}")
+
+        # If no bank credit mapped
+        if actual_receipts == 0:
+            # Check if balance due is significant (absolute value > 10 Rs)
+            if abs(balance_due) > 10:
+                unmapped_weeks.append(week_idx)
+                print(f"  -> Week {week_idx}: ADDING NOTE (Significant balance)")
+            else:
+                print(f"  -> Week {week_idx}: SKIPPING NOTE (Balance near zero)")
+        else:
+            print(f"  -> Week {week_idx}: SKIPPING NOTE (Already mapped)")
+
+    def ordinal(n):
+        if 11 <= (n % 100) <= 13:
+            return f"{n}th"
+        suffixes = {1: "st", 2: "nd", 3: "rd"}
+        return f"{n}{suffixes.get(n % 10, 'th')}"
+
+    if not has_bank:
+        note = "1. Due to absence of Bank, actual receipts could not be mapped."
+    elif unmapped_weeks:
+        week_names = [f"{ordinal(w)} week" for w in unmapped_weeks]
+        if len(week_names) == 1:
+            weeks_str = week_names[0]
+        else:
+            weeks_str = ", ".join(week_names[:-1]) + " and " + week_names[-1]
+        note = f"1. Bank credits of {weeks_str} will be credited in the next month."
+    else:
+        print("All relevant weeks mapped or no credits expected; no notepoint needed.")
+        return
+
+    print(f"Adding note: {note}")
+    cashflow.cell(row=42, column=2).value = note
+    if discrepancies:
+        discrepancies.cell(row=26, column=1).value = note
 
 def process_zomato_recon(
         invoice_folder_path,
@@ -1183,6 +1392,8 @@ def process_zomato_recon(
         closing_week_num = 0
 
         total_weeks = len(week_plan)
+        week_ctr_map = {}
+        week_expected_map = {wn: 0.0 for wn in range(1, 7)} # Track expected payout numerically
 
         for idx, week_info in enumerate(week_plan):
             # Update progress
@@ -1215,6 +1426,37 @@ def process_zomato_recon(
                         break
 
                 if ol_sheet:
+                    # Extract CTR/UTR from Order Level sheet
+                    ctr_value = None
+                    utr_col = None
+                    header_row = None
+                    
+                    # Search first 15 rows for the Bank UTR header
+                    for r in range(1, 16):
+                        for c in range(1, ol_sheet.max_column + 1):
+                            cell_val = str(ol_sheet.cell(row=r, column=c).value or "").strip().lower()
+                            if cell_val == "bank utr" or cell_val == "utr" or cell_val == "ctr" or "bank utr" in cell_val:
+                                utr_col = c
+                                header_row = r
+                                break
+                        if utr_col:
+                            break
+                            
+                    if utr_col and header_row:
+                        # Extract first non-empty value in that column below the header
+                        for r in range(header_row + 1, ol_sheet.max_row + 1):
+                            val = ol_sheet.cell(row=r, column=utr_col).value
+                            if val is not None and str(val).strip() != "" and str(val).strip().lower() not in ["-", "na", "n/a", "nan", "none"]:
+                                ctr_value = str(val).strip()
+                                print(f"  ✅ Extracted UTR from Order Level sheet: '{ctr_value}'")
+                                break
+                        if not ctr_value:
+                            print(f"  ⚠️ UTR column found but no value extracted for Week {week_num}")
+                    else:
+                        print(f"  ⚠️ Could not find Bank UTR column in Order Level sheet for Week {week_num}")
+                        
+                    week_ctr_map[week_num] = ctr_value
+
                     d1 = ensure_sheet(recon, f"D1W{week_num}")
 
                     spillover_result = copy_data_with_spillover_filter(ol_sheet, d1, 7, month, week_info, None)
@@ -1227,10 +1469,12 @@ def process_zomato_recon(
                         if spillover_result['closing_spillover'] != 0:
                             closing_spillover_value = spillover_result['closing_spillover']
                             closing_week_num = week_num
+                            week_expected_map[week_num] += closing_spillover_value
                             print(f"  📝 Captured closing spillover: {closing_spillover_value} (Week {week_num})")
 
                     perform_calculations_on_data1(recon, d1, week_num, output_path)
-                    map_values_to_cashflow(recon, d1, week_num)
+                    d1_total = map_values_to_cashflow(recon, d1, week_num)
+                    week_expected_map[week_num] += d1_total
 
                     total_orders = count_total_orders_from_d1w(d1, header_row=5)
                     summary_col = 3 + (week_num - 1)
@@ -1305,7 +1549,8 @@ def process_zomato_recon(
 
                 # Map D2W values to Cashflow (always call this to check D1W as well)
                 print(f"  🔗 Mapping week-wise deductions (D2W/D1W) to Cashflow...")
-                map_d2w_values_to_cashflow(recon, d2, week_num)
+                d2_total = map_d2w_values_to_cashflow(recon, d2, week_num)
+                week_expected_map[week_num] += d2_total
 
             finally:
                 wb_invoice.close()
@@ -1341,6 +1586,39 @@ def process_zomato_recon(
             print(f"  ✅ Mapped closing spillover to row 35, col {week_col}")
 
         replace_month_in_sheets(recon, month)
+
+        # ====== ZOMATO BANK MAPPING & NOTEPOINTS ======
+        bank_wb = None
+        try:
+            if bank_file_path:
+                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False)
+                # Copy bank sheet to recon
+                if "BANK" in recon.sheetnames:
+                    recon_bank = recon["BANK"]
+                    recon_bank.delete_rows(1, recon_bank.max_row)
+                else:
+                    recon_bank = recon.create_sheet("BANK")
+                
+                source_bank_sheet = bank_wb.active
+                for i, row in enumerate(source_bank_sheet.iter_rows(values_only=True), 1):
+                    for j, val in enumerate(row, 1):
+                        recon_bank.cell(row=i, column=j).value = val
+                print("Bank sheet imported into reconciliation file.")
+                
+                map_zomato_bank_to_actual_receipts(recon, week_ctr_map)
+        except Exception as bank_e:
+            print(f"Failed to process bank file: {bank_e}")
+        finally:
+            if bank_wb is not None:
+                bank_wb.close()
+                if bank_file_path and os.path.exists(bank_file_path):
+                    try:
+                        os.remove(bank_file_path)
+                    except:
+                        pass
+        
+        add_zomato_notepoints(recon, num_weeks=len(week_plan), has_bank=bool(bank_file_path), week_expected_map=week_expected_map)
+        # ===============================================
 
         recon.save(output_path)
         recon.close()

@@ -6,6 +6,11 @@ Fixed template version - users only upload invoices
 from flask import Flask, render_template, request, jsonify, send_file
 import os
 import shutil
+from dotenv import load_dotenv
+
+# Load environment variables IMMEDIATELY
+load_dotenv()
+print(f"DEBUG: GROQ_API_KEY loaded: {'Yes' if os.environ.get('GROQ_API_KEY') else 'No'}")
 import tempfile
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -13,6 +18,10 @@ import uuid
 import time
 import threading
 import gc
+import json
+import base64
+from groq import Groq
+from pos_cleaner import clean_pos_excel, aggregate_pos, generate_pos_report
 
 # Import backend processing
 from process_invoices import process_zomato_recon
@@ -282,6 +291,19 @@ def upload_files():
                 shutil.rmtree(session_folder)
             return jsonify({'success': False, 'message': 'No valid invoice files uploaded'})
 
+        # ✅ GET OPTIONAL BANK FILE
+        bank_file = request.files.get('bankFile')
+        bank_file_path = None
+        if bank_file and bank_file.filename != '':
+            if allowed_file(bank_file.filename):
+                bank_filename = secure_filename(bank_file.filename)
+                bank_file_path = os.path.join(session_folder, f"bank_{bank_filename}")
+                bank_file.save(bank_file_path)
+            else:
+                if os.path.exists(session_folder):
+                    shutil.rmtree(session_folder)
+                return jsonify({'success': False, 'message': 'Invalid bank file format'})
+
         # Generate output path
         output_filename = get_formatted_filename(client_name, "Zomato", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
@@ -305,6 +327,7 @@ def upload_files():
                     first_week_end=first_week_end,
                     last_week_start=last_week_start,
                     last_week_end=last_week_end,
+                    bank_file_path=bank_file_path,
                     progress_callback=p_func
                 )
             else: # Default to weekly or other modes handled by process_zomato_recon
@@ -318,6 +341,7 @@ def upload_files():
                     first_week_end=first_week_end,
                     last_week_start=last_week_start,
                     last_week_end=last_week_end,
+                    bank_file_path=bank_file_path,
                     progress_callback=p_func
                 )
         except Exception as e:
@@ -568,6 +592,117 @@ def upload_paytm():
             'message': f"Submission Error: {str(e)}",
             'traceback': error_details
         }), 500
+
+
+@app.route('/parse-pos-structure', methods=['POST'])
+def parse_pos_structure():
+    """Uses Groq Llama-3.2 Vision to read irregular date ranges from a screenshot."""
+    if 'image' not in request.files:
+        return jsonify({"error": "No image uploaded"}), 400
+    
+    api_key = os.environ.get('GROQ_API_KEY')
+    if not api_key:
+        return jsonify({"error": "GROQ_API_KEY not configured in environment"}), 500
+    
+    client = Groq(api_key=api_key)
+    file = request.files['image']
+    
+    try:
+        # Read image bytes and encode to base64
+        img_bytes = file.read()
+        base64_image = base64.b64encode(img_bytes).decode('utf-8')
+        
+        prompt = """
+        Analyze this image of a table header containing date ranges.
+        Extract every period mentioned (e.g., '1st to 3rd', '4th to 7th').
+        Return ONLY a clean JSON array of objects:
+        [
+          {"label": "1st to 3rd", "start_day": 1, "end_day": 3},
+          ...
+        ]
+        Extract all columns from left to right. Ensure start_day and end_day are integers.
+        Return only the JSON array, no markdown or explanation.
+        """
+        
+        completion = client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{base64_image}",
+                            },
+                        },
+                    ],
+                }
+            ],
+            temperature=0.1,
+            max_tokens=1024,
+        )
+        
+        # Parse response
+        resp_text = completion.choices[0].message.content
+        clean_json = resp_text.replace('```json', '').replace('```', '').strip()
+        ranges = json.loads(clean_json)
+        
+        return jsonify({"ranges": ranges})
+        
+    except Exception as e:
+        print(f"❌ Groq AI Parsing Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/extract-pos', methods=['POST'])
+def extract_pos():
+    """Manual POS extraction and aggregation with Excel generation"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': 'No file uploaded'})
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'No file selected'})
+
+        # 1. Clean Data
+        week_ranges = request.form.get('week_ranges')
+        if week_ranges:
+            week_ranges = json.loads(week_ranges)
+            
+        custom_dinein_ranges = request.form.get('custom_dinein_ranges')
+        if custom_dinein_ranges:
+            custom_dinein_ranges = json.loads(custom_dinein_ranges)
+
+        clean_result = clean_pos_excel(file)
+        pos_type = clean_result['pos_type']
+        cleaned_df = clean_result['dataframe']
+        
+        if cleaned_df.empty:
+            return jsonify({'success': False, 'message': 'Could not extract any data from Excel'})
+
+        # 3. Hardcoded Aggregation
+        data = aggregate_pos(cleaned_df, pos_type, week_ranges, custom_dinein_ranges)
+        
+        # 3. Generate Report
+        report_filename = f"POS_Summary_{uuid.uuid4().hex[:8]}.xlsx"
+        report_path = os.path.join(app.config['OUTPUT_FOLDER'], report_filename)
+        generate_pos_report(data, report_path)
+        
+        return jsonify({
+            'success': True,
+            'pos_type': pos_type,
+            'data': data,
+            'download_url': f"/download/{report_filename}"
+        })
+
+    except Exception as e:
+        print(f"❌ POS Extraction Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)})
+
 
 
 @app.route('/download/<filename>')
