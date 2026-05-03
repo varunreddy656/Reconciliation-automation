@@ -21,7 +21,26 @@ import gc
 import json
 import base64
 from groq import Groq
+from duckduckgo_search import DDGS
 from pos_cleaner import clean_pos_excel, aggregate_pos, generate_pos_report
+
+def search_web(query):
+    """Perform a web search using DuckDuckGo to get latest info."""
+    try:
+        with DDGS() as ddgs:
+            # We search for the user's query and get top snippets
+            results = list(ddgs.text(query, max_results=3))
+            if not results:
+                return "No search results found."
+            
+            formatted_results = []
+            for r in results:
+                formatted_results.append(f"Source: {r.get('href')}\nContent: {r.get('body')}")
+            
+            return "\n\n".join(formatted_results)
+    except Exception as e:
+        print(f"⚠️ Search error: {e}")
+        return "Search failed."
 
 # Import backend processing
 from process_invoices import process_zomato_recon
@@ -44,6 +63,41 @@ app.config['PAYTM_TEMPLATE'] = 'template_files/paytm_template.xlsx' # Paytm Temp
 # Create folders if they don't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+
+# --- Chatbot Configuration & Rate Limiting ---
+CHAT_LIMITS_FILE = os.path.join(app.config['UPLOAD_FOLDER'], 'chat_limits.json')
+CHAT_MAX_MESSAGES = 10  # Max messages per hour
+CHAT_RESET_INTERVAL = 3600  # 1 hour in seconds
+
+def load_chat_limits():
+    if os.path.exists(CHAT_LIMITS_FILE):
+        try:
+            with open(CHAT_LIMITS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_chat_limits(limits):
+    try:
+        with open(CHAT_LIMITS_FILE, 'w') as f:
+            json.dump(limits, f)
+    except:
+        pass
+
+chat_limits = load_chat_limits()
+
+RESTRO_SYSTEM_PROMPT = """
+You are the Restro AI Assistant, an expert in the entire spectrum of Indian Restaurant Accounting, Finance, and Operations. 
+You represent 'Restro AI', a high-end tool for restaurant financial management.
+
+STRICT OPERATING RULES:
+1. SCOPE: Answer ALL questions related to restaurant accounting, including COGS (Cost of Goods Sold), Menu Engineering, Payroll, Vendor Management, Cashflow, GST/TDS, and software integration (Zoho, Tally, Petpooja).
+2. RECONCILIATION: While you are a specialist in Zomato/Swiggy reconciliation, you are also a general authority on restaurant P&L and Balance Sheets.
+3. ADVICE: Provide actionable advice on how to improve restaurant profitability, manage food costs, and resolve report discrepancies.
+4. DISALLOWED TOPICS: If a query is completely unrelated to the restaurant industry or finance, respond with: "I am specialized in the restaurant business and accounting. I cannot assist with unrelated topics."
+5. Be comprehensive yet concise. Use bullet points and professional formatting.
+"""
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 
@@ -760,6 +814,96 @@ def cleanup_old_files():
         return jsonify({'success': True, 'message': f'Cleaned {cleaned} items'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    """Restro AI Chatbot with Knowledge Base and Web Search"""
+    data = request.json
+    user_message = data.get('message', '').strip()
+    user_id = request.remote_addr
+    
+    if not user_message:
+        return jsonify({"error": "Empty message"}), 400
+    
+    if len(user_message) > 500:
+        return jsonify({"error": "Message too long. Please keep questions under 500 characters."}), 400
+    
+    # Rate Limiting Logic
+    now = time.time()
+    if user_id not in chat_limits:
+        chat_limits[user_id] = {'count': 0, 'last_reset': now}
+    
+    if now - chat_limits[user_id]['last_reset'] > CHAT_RESET_INTERVAL:
+        chat_limits[user_id] = {'count': 0, 'last_reset': now}
+    
+    if chat_limits[user_id]['count'] >= CHAT_MAX_MESSAGES:
+        return jsonify({
+            "reply": "You have reached the hourly limit for the Restro AI Assistant. Please try again later or use the Feedback form for urgent queries.",
+            "error": "Rate limit exceeded"
+        }), 429
+    
+    # Load Internal Knowledge Base
+    kb_content = ""
+    kb_path = 'restro_knowledge.txt'
+    if os.path.exists(kb_path):
+        try:
+            with open(kb_path, 'r', encoding='utf-8') as f:
+                kb_content = f.read()
+        except:
+            pass
+
+    # Determine if we need Web Search (expanded to all restaurant accounting)
+    accounting_keywords = [
+        'zoho', 'tally', 'petpooja', 'pet pooja', 'gst', 'tds', 'payroll', 
+        'cogs', 'food cost', 'inventory', 'vendor', 'p&l', 'profit and loss',
+        'balance sheet', 'cashflow', 'swiggy', 'zomato', 'dineout', 'accounting',
+        'reconciliation', 'margin', 'ebitda', 'operating cost'
+    ]
+    web_context = ""
+    should_search = any(kw in user_message.lower() for kw in accounting_keywords) or len(user_message.split()) > 6
+    
+    if should_search:
+        print(f"🔍 Performing Web Search for: {user_message}")
+        web_context = search_web(user_message)
+
+    # Build Final Prompt
+    enhanced_system_prompt = f"{RESTRO_SYSTEM_PROMPT}\n\n"
+    
+    if kb_content:
+        enhanced_system_prompt += f"INTERNAL COMPANY KNOWLEDGE (Prioritize this):\n{kb_content}\n\n"
+        
+    if web_context:
+        enhanced_system_prompt += f"LIVE WEB SEARCH CONTEXT (Use for software specifics):\n{web_context}\n\n"
+
+    # Process with Groq
+    api_key = os.environ.get('GROQ_API_KEY')
+    if not api_key:
+        return jsonify({"error": "AI configuration missing"}), 500
+    
+    try:
+        client = Groq(api_key=api_key)
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": enhanced_system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.3,
+            max_tokens=300
+        )
+        
+        chat_limits[user_id]['count'] += 1
+        save_chat_limits(chat_limits)
+        
+        return jsonify({
+            "reply": completion.choices[0].message.content,
+            "remaining": CHAT_MAX_MESSAGES - chat_limits[user_id]['count']
+        })
+        
+    except Exception as e:
+        print(f"? Chatbot Error: {e}")
+        return jsonify({"error": "Restro AI Assistant is currently resting. Try again in a bit."}), 500
 
 
 if __name__ == '__main__':

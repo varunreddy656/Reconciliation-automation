@@ -764,6 +764,7 @@
               setTimeout(() => {
                 splash.style.display = 'none';
                 container.style.opacity = '1';
+                document.getElementById('chatWidget').style.display = 'block';
               }, 800); // Wait for transform animation to finish
             }, 200);
           }
@@ -1471,6 +1472,146 @@
         btn.innerHTML = originalText;
       }
     });
+  </script>
+
+  <!-- Restro AI Chatbot -->
+  <div class="chat-widget" id="chatWidget" style="display: none;">
+    <button class="chat-bubble" onclick="toggleChat()">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+    </button>
+    
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-header">
+        <div class="chat-header-info">
+          <div class="chat-avatar">R</div>
+          <div>
+            <h3>Restro AI Assistant</h3>
+            <span class="chat-status" style="color: var(--gold); font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase;">Experimental Feature</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <button class="chat-header-btn" onclick="clearChat()" title="Delete History" style="background:none; border:none; color:var(--text-dim); cursor:pointer; padding:5px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+          </button>
+          <button class="chat-close" onclick="toggleChat()">&times;</button>
+        </div>
+      </div>
+      
+      <div class="chat-messages" id="chatMessages">
+        <div class="message system">
+          Welcome! I am the Restro AI Assistant (Experimental). I am currently learning to better assist with restaurant accounting.
+        </div>
+      </div>
+      <button class="scroll-bottom-btn" id="scrollDownBtn" onclick="scrollToBottom()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M7 13l5 5 5-5M7 6l5 5 5-5"></path>
+        </svg>
+      </button>
+      
+      <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="Ask a question..." onkeypress="handleChatKey(event)" maxlength="500">
+        <button onclick="sendChatMessage()" id="chatSendBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const chatWindow = document.getElementById('chatWindow');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+
+    function toggleChat() {
+      chatWindow.classList.toggle('active');
+      if (chatWindow.classList.contains('active')) {
+        chatInput.focus();
+        scrollToBottom();
+      }
+    }
+
+    function clearChat() {
+      if (confirm('Delete entire chat history?')) {
+        chatMessages.innerHTML = `
+          <div class="message system">
+            Chat history cleared. I am the Restro AI Assistant (Experimental). How can I help you today?
+          </div>
+        `;
+      }
+    }
+
+    function scrollToBottom() {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    chatMessages.onscroll = function() {
+      const btn = document.getElementById('scrollDownBtn');
+      if (chatMessages.scrollTop < chatMessages.scrollHeight - 600) {
+        btn.classList.add('visible');
+      } else {
+        btn.classList.remove('visible');
+      }
+    };
+
+    function handleChatKey(e) {
+      if (e.key === 'Enter') sendChatMessage();
+    }
+
+    async function sendChatMessage() {
+      const msg = chatInput.value.trim();
+      if (!msg) return;
+
+      // Add user message
+      appendMessage('user', msg);
+      chatInput.value = '';
+      
+      // Add typing indicator
+      const typingId = appendMessage('system', 'Restro AI is thinking...');
+
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg })
+        });
+        
+        const data = await response.json();
+        removeMessage(typingId);
+
+        if (response.ok) {
+          appendMessage('ai', data.reply);
+        } else {
+          appendMessage('system', data.reply || data.error || 'Connection lost.');
+        }
+      } catch (err) {
+        removeMessage(typingId);
+        appendMessage('system', 'Sorry, I am currently offline. Please try again later.');
+      }
+    }
+
+    function appendMessage(type, text) {
+      const div = document.createElement('div');
+      div.className = `message ${type}`;
+      div.id = 'msg-' + Date.now();
+      div.innerText = text;
+      chatMessages.appendChild(div);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return div.id;
+    }
+
+    function removeMessage(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
   </script>
 </body>
 </html>

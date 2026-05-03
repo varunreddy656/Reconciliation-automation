@@ -6,3 +6,4 @@ gunicorn==21.2.0
 Pillow>=10.0.0
 groq
 python-dotenv
+duckduckgo-search
