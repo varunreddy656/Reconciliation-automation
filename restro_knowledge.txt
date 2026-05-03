@@ -1,0 +1,16 @@
+# RESTRO AI KNOWLEDGE BASE
+# Add your custom company information, standard operating procedures, and specific accounting rules below.
+# The AI will read this file every time it answers a question.
+
+[COMPANY INFO]
+Name: Restro AI (by Numerize AI)
+Specialty: Indian Restaurant Accounting and Reconciliation.
+
+[SOP - ZOMATO RECONCILIATION]
+(Add your specific steps here later...)
+
+[SOP - SWIGGY RECONCILIATION]
+(Add your specific steps here later...)
+
+[ZOHO BOOKS SETTINGS]
+(Add your specific Zoho settings here later...)
