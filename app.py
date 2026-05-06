@@ -66,8 +66,8 @@ os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
 # --- Chatbot Configuration & Rate Limiting ---
 CHAT_LIMITS_FILE = os.path.join(app.config['UPLOAD_FOLDER'], 'chat_limits.json')
-CHAT_MAX_MESSAGES = 10  # Max messages per hour
-CHAT_RESET_INTERVAL = 3600  # 1 hour in seconds
+CHAT_MAX_MESSAGES = 4  # Max messages per minute
+CHAT_RESET_INTERVAL = 60  # 1 minute in seconds
 
 def load_chat_limits():
     if os.path.exists(CHAT_LIMITS_FILE):
@@ -839,7 +839,7 @@ def chat():
     
     if chat_limits[user_id]['count'] >= CHAT_MAX_MESSAGES:
         return jsonify({
-            "reply": "You have reached the hourly limit for the Restro AI Assistant. Please try again later or use the Feedback form for urgent queries.",
+            "reply": "You are sending messages too quickly. Please wait a minute before asking more questions.",
             "error": "Rate limit exceeded"
         }), 429
     

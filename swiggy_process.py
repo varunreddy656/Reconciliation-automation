@@ -107,7 +107,13 @@ def extract_total_orders(fp):
     try:
         wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
         sheet = wb["Summary"]
-        total_orders_value = sheet["C15"].value  # exact cell read
+        total_orders_value = None
+        # Robust search for Total Orders label in Column B
+        for r in range(1, 100):
+            val_b = str(sheet.cell(row=r, column=2).value or "").strip().lower()
+            if "total orders (delivered + cancelled)" in val_b:
+                total_orders_value = sheet.cell(row=r, column=3).value
+                break
         wb.close()
         return total_orders_value
     except Exception as e:
@@ -233,21 +239,50 @@ def map_values_to_cashflow(wb, data1_sheet, week):
             if not label:
                 continue
             label = str(label).strip()
+
             if label == "High Priority":
-                total_adj_row = None
+                # Logic: Sum multiple Ad types from Column C
+                # Flexible matching: search for headers anywhere in Column A (case-insensitive)
+                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers"]
+                found_cells = []
                 for r in range(1, data2_sheet.max_row + 1):
-                    cell_value = data2_sheet.cell(row=r, column=1).value
-                    if cell_value and "Total Adjustments" in str(cell_value):
-                        total_adj_row = r
-                        break
-                if total_adj_row:
-                    value_cell = data2_sheet.cell(row=total_adj_row, column=2)
-                    formula = f"=-'{data2_sheet.title}'!{value_cell.coordinate}"
-                    cashflow.cell(row=row, column=week_col).value = formula
-                    print(f"High Priority mapped from {data2_sheet.title} row {total_adj_row}")
+                    val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
+                    if any(h in val_a for h in ad_headers):
+                        val_c_cell = data2_sheet.cell(row=r, column=3) # Column C
+                        if val_c_cell.value is not None:
+                            found_cells.append(f"'{data2_sheet.title}'!{val_c_cell.coordinate}")
+                
+                if found_cells:
+                    formula = "=-(" + "+".join(found_cells) + ")"
+                    target_cell = cashflow.cell(row=row, column=week_col)
+                    target_cell.value = formula
+                    target_cell.number_format = '0.00'
+                    print(f"High Priority mapped as sum of {len(found_cells)} ad rows")
                 else:
-                    print(f"Warning: 'Total Adjustments' not found in {data2_sheet.title}")
-                break
+                    cashflow.cell(row=row, column=week_col).value = 0
+                    print(f"Warning: No specific Ads found in {data2_sheet.title}")
+
+            elif label == "Previous week Adjustments":
+                # Logic: Find 'Previous week outstanding' in Column A, value in Column C
+                prev_out_row = None
+                for r in range(1, data2_sheet.max_row + 1):
+                    val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
+                    # User confirmed label is in Column A. Matches 'Previous week outstanding'
+                    if "previous week outstanding" in val_a:
+                        prev_out_row = r
+                        break
+                
+                if prev_out_row:
+                    val_c_cell = data2_sheet.cell(row=prev_out_row, column=3)
+                    # Use negative sign to make it positive (since Swiggy lists it as negative)
+                    formula = f"=-'{data2_sheet.title}'!{val_c_cell.coordinate}"
+                    target_cell = cashflow.cell(row=row, column=week_col)
+                    target_cell.value = formula
+                    target_cell.number_format = '0.00' # Ensure it's a plain number without currency symbols
+                    print(f"Previous week Adjustments mapped from {data2_sheet.title} row {prev_out_row} (Positive)")
+                else:
+                    cashflow.cell(row=row, column=week_col).value = 0
+                    print(f"Warning: 'Previous week outstanding' not found in {data2_sheet.title}")
     else:
         print(f"Warning: Data2 sheet '{data2_sheet_name}' not found for week {week}")
 
@@ -433,10 +468,10 @@ def add_notepoints_based_on_bank(recon_wb, week_ranges, bank_file_path):
     cashflow = recon_wb["Cashflow"]
     discrepancies = recon_wb["Discrepancies"] if "Discrepancies" in recon_wb.sheetnames else None
 
-    # Clear prior notes
-    cashflow.cell(row=37, column=2).value = None
+    # Clear prior notes at B38 (Cashflow) and B24 (Discrepancies)
+    cashflow.cell(row=38, column=2).value = None
     if discrepancies:
-        discrepancies.cell(row=23, column=2).value = None
+        discrepancies.cell(row=24, column=2).value = None
 
     actual_row = None
     for row in range(1, cashflow.max_row + 1):
@@ -483,9 +518,9 @@ def add_notepoints_based_on_bank(recon_wb, week_ranges, bank_file_path):
 
     print(f"Adding note: {note}")
 
-    cashflow.cell(row=37, column=2).value = note
+    cashflow.cell(row=38, column=2).value = note
     if discrepancies:
-        discrepancies.cell(row=23, column=2).value = note
+        discrepancies.cell(row=24, column=2).value = note
 
 
 def copy_images_from_template(template_path, output_path):
@@ -624,11 +659,15 @@ def process_invoices_web(
             copy_data(ol, d1, 3)
             copy_data(add, d2, 4)
             
-            # Extract Total Orders directly
+            # Extract Total Orders directly using robust dynamic search
             total_orders = None
             try:
                 sheet_sum = wb_invoice["Summary"]
-                total_orders = sheet_sum["C15"].value
+                for r in range(1, 100):
+                    val_b = str(sheet_sum.cell(row=r, column=2).value or "").strip().lower()
+                    if "total orders (delivered + cancelled)" in val_b:
+                        total_orders = sheet_sum.cell(row=r, column=3).value
+                        break
             except Exception as e:
                 print(f"Error extracting Total Orders from {fp}: {e}")
 
