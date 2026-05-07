@@ -243,14 +243,21 @@ def map_values_to_cashflow(wb, data1_sheet, week):
             if label == "High Priority":
                 # Logic: Sum multiple Ad types from Column C
                 # Flexible matching: search for headers anywhere in Column A (case-insensitive)
-                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers"]
+                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers", "brandverse social media marketing"]
                 found_cells = []
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
                     if any(h in val_a for h in ad_headers):
-                        val_c_cell = data2_sheet.cell(row=r, column=3) # Column C
-                        if val_c_cell.value is not None:
-                            found_cells.append(f"'{data2_sheet.title}'!{val_c_cell.coordinate}")
+                        # Find value in Column B, C, or D until found
+                        target_val_cell = None
+                        for col_idx in [2, 3, 4]: # B, C, D
+                            cell = data2_sheet.cell(row=r, column=col_idx)
+                            if cell.value is not None and cell.value != "":
+                                target_val_cell = cell
+                                break
+                        
+                        if target_val_cell:
+                            found_cells.append(f"'{data2_sheet.title}'!{target_val_cell.coordinate}")
                 
                 if found_cells:
                     formula = "=-(" + "+".join(found_cells) + ")"
@@ -263,23 +270,25 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                     print(f"Warning: No specific Ads found in {data2_sheet.title}")
 
             elif label == "Previous week Adjustments":
-                # Logic: Find 'Previous week outstanding' in Column A, value in Column C
-                prev_out_row = None
+                # Logic: Find all 'Previous week outstanding' rows in Column A
+                found_cells = []
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
-                    # User confirmed label is in Column A. Matches 'Previous week outstanding'
                     if "previous week outstanding" in val_a:
-                        prev_out_row = r
-                        break
+                        # Find value in Column B, C, or D until found
+                        for col_idx in [2, 3, 4]: # B, C, D
+                            cell = data2_sheet.cell(row=r, column=col_idx)
+                            if cell.value is not None and cell.value != "":
+                                found_cells.append(f"'{data2_sheet.title}'!{cell.coordinate}")
+                                break
                 
-                if prev_out_row:
-                    val_c_cell = data2_sheet.cell(row=prev_out_row, column=3)
+                if found_cells:
                     # Use negative sign to make it positive (since Swiggy lists it as negative)
-                    formula = f"=-'{data2_sheet.title}'!{val_c_cell.coordinate}"
+                    formula = "=-(" + "+".join(found_cells) + ")"
                     target_cell = cashflow.cell(row=row, column=week_col)
                     target_cell.value = formula
                     target_cell.number_format = '0.00' # Ensure it's a plain number without currency symbols
-                    print(f"Previous week Adjustments mapped from {data2_sheet.title} row {prev_out_row} (Positive)")
+                    print(f"Previous week Adjustments mapped as sum of {len(found_cells)} rows from {data2_sheet.title}")
                 else:
                     cashflow.cell(row=row, column=week_col).value = 0
                     print(f"Warning: 'Previous week outstanding' not found in {data2_sheet.title}")
