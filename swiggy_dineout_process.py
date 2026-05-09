@@ -151,7 +151,7 @@ def apply_sd_calculations(ws):
             cell_e.value = res
             extracted['service_fee'] = res
             
-        elif any(x in label.upper() for x in ["TOP CAROUSEL", "TOP_CAROUSEL", "LISTING AD", "LISTING_AD", "AD CAMPAIGN", "AD_CAMPAIGN", "FEATURED_AD", "BRANDVERSE SOCIAL MEDIA MARKETING"]):
+        elif any(x in label.upper() for x in ["TOP CAROUSEL", "TOP_CAROUSEL", "LISTING AD", "LISTING_AD", "AD CAMPAIGN", "AD_CAMPAIGN", "FEATURED_AD", "BRANDVERSE SOCIAL MEDIA MARKETING", "HYPER BOOST", "HYPERBOOST"]):
             # Col E = -Col D (Turn to positive)
             positive_val = -val_d
             cell_e.value = positive_val
