@@ -869,7 +869,7 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
     week_col = 3 + (week - 1)
 
     D2W_MAPPING = {
-        "High Priority": (["Total Ads & miscellaneous services"], "B", "G"),
+        "High Priority": (["Total Ads & miscellaneous services", "Brandverse Social Media Marketing", "Brandverse social media marketing"], "B", "G"),
         "Zomato hyperpure Payment Adjustments": (["Total Hyperpure"], "B", "G"),
         "Service Fee Reversal": (["Service Fees Reversal"], "B", "G"),
         "Up-Time Pack Fee": (["Fees for Up-time pack"], "B", "G"),
@@ -918,26 +918,30 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
                             print(f"  ✅ Found extra ads at col {col_idx}")
                         break
 
-        # Main D2W search (existing logic)
+        # Main D2W search (Modified to find ALL matching rows)
+        found_rows = []
+        found_total_value = 0
         for row in range(1, d2_sheet.max_row + 1):
             cell_value = str(d2_sheet[f"{search_col}{row}"].value or "").strip()
             for search_term in search_terms:
                 if cell_value == search_term:
-                    found_row = row
-                    found_value = d2_sheet[f"{value_col}{row}"].value
+                    found_rows.append(row)
+                    val = d2_sheet[f"{value_col}{row}"].value
+                    if isinstance(val, (int, float)):
+                        found_total_value += val
                     print(f"  ✅ Found '{search_term}' at row {row}")
                     break
-            if found_row: break
 
         # Mapping Logic
-        if any([found_row, addition_row, extra_ads_formula_part]):
+        if any([found_rows, addition_row, extra_ads_formula_part]):
             for cf_row in range(1, cashflow.max_row + 1):
                 label = str(cashflow.cell(row=cf_row, column=2).value or "").strip()
                 if label == cashflow_label:
                     formula = "="
                     parts = []
-                    if found_row:
-                        parts.append(f"'{d2_sheet.title}'!{value_col}{found_row}")
+                    if found_rows:
+                        row_parts = [f"'{d2_sheet.title}'!{value_col}{r}" for r in found_rows]
+                        parts.append("+".join(row_parts))
                     
                     if addition_row:
                         # Deduct total additions
@@ -947,9 +951,10 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
                     if extra_ads_formula_part:
                         formula += extra_ads_formula_part
                     
-                    # Clean up formula starting with =-
-                    if formula.startswith("=-"): formula = "=" + formula[2:]
-                    elif formula == "=": continue # Should not happen
+                    # Clean up formula starting with =+ or =-
+                    if formula.startswith("=+"): formula = "=" + formula[2:]
+                    elif formula.startswith("=-"): formula = "=" + formula[2:]
+                    elif formula == "=": continue 
 
                     cashflow.cell(row=cf_row, column=week_col).value = formula
                     print(f"  ✅ Mapped {cashflow_label} for Week {week}: {formula}")
@@ -957,8 +962,7 @@ def map_d2w_values_to_cashflow(wb, d2_sheet, week, week_type="normal"):
                     # Track numeric value for notepoint logic
                     try:
                         v = 0
-                        if found_value and isinstance(found_value, (int, float)):
-                            v += found_value
+                        v += found_total_value
                         if addition_row:
                             add_val = d2_sheet[f"{value_col}{addition_row}"].value
                             if isinstance(add_val, (int, float)):

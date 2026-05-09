@@ -151,16 +151,16 @@ def apply_sd_calculations(ws):
             cell_e.value = res
             extracted['service_fee'] = res
             
-        elif any(x in label.upper() for x in ["TOP CAROUSEL", "TOP_CAROUSEL", "LISTING AD", "LISTING_AD", "AD CAMPAIGN", "AD_CAMPAIGN", "FEATURED_AD"]):
+        elif any(x in label.upper() for x in ["TOP CAROUSEL", "TOP_CAROUSEL", "LISTING AD", "LISTING_AD", "AD CAMPAIGN", "AD_CAMPAIGN", "FEATURED_AD", "BRANDVERSE SOCIAL MEDIA MARKETING", "HYPER BOOST", "HYPERBOOST"]):
             # Col E = -Col D (Turn to positive)
             positive_val = -val_d
             cell_e.value = positive_val
             total_ads += positive_val
 
         elif "OUTSTANDING_FOR_PREVIOUS_WEEKS" in label:
-            # Map column D value
+            # Map column D value (Accumulate if multiple rows)
             cell_e.value = val_d
-            extracted['outstanding'] = val_d
+            extracted['outstanding'] += val_d
 
         elif "REFUND_FOR_SWIGGY_SERVICE_FEE" in label:
             # Map column D value 

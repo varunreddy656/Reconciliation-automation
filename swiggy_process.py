@@ -243,7 +243,7 @@ def map_values_to_cashflow(wb, data1_sheet, week):
             if label == "High Priority":
                 # Logic: Sum multiple Ad types from Column C
                 # Flexible matching: search for headers anywhere in Column A (case-insensitive)
-                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers", "brandverse social media marketing"]
+                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers", "brandverse social media marketing", "hyper boost", "hyperboost"]
                 found_cells = []
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
@@ -251,8 +251,20 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                         # Find value in Column B, C, or D until found
                         target_val_cell = None
                         for col_idx in [2, 3, 4]: # B, C, D
-                            cell = data2_sheet.cell(row=r, column=col_idx)
-                            if cell.value is not None and cell.value != "":
+                            cell = data2_sheet.cell(row=row_idx if 'row_idx' in locals() else r, column=col_idx)
+                            val = cell.value
+                            
+                            # Check if the value is valid (numeric or string starting with ₹ or digit)
+                            is_valid = False
+                            if val is not None and val != "":
+                                if isinstance(val, (int, float)):
+                                    is_valid = True
+                                elif isinstance(val, str):
+                                    cleaned = val.strip()
+                                    if cleaned and (cleaned.startswith('₹') or cleaned[0].isdigit() or (cleaned.startswith('-') and len(cleaned) > 1 and cleaned[1].isdigit())):
+                                        is_valid = True
+                            
+                            if is_valid:
                                 target_val_cell = cell
                                 break
                         
