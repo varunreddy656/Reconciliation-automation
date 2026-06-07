@@ -243,7 +243,7 @@ def map_values_to_cashflow(wb, data1_sheet, week):
             if label == "High Priority":
                 # Logic: Sum multiple Ad types from Column C
                 # Flexible matching: search for headers anywhere in Column A (case-insensitive)
-                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers", "brandverse social media marketing", "hyper boost", "hyperboost"]
+                ad_headers = ["cost per click - ads", "search ads (cba)", "top picks - ads", "ads offers", "brandverse social media marketing", "hyper boost", "hyperboost", "unlimited ads"]
                 found_cells = []
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
@@ -304,6 +304,49 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                 else:
                     cashflow.cell(row=row, column=week_col).value = 0
                     print(f"Warning: 'Previous week outstanding' not found in {data2_sheet.title}")
+
+            elif label == "Paid by Restaurant":
+                found_cells = []
+                for r in range(1, data2_sheet.max_row + 1):
+                    val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
+                    if "discount deduction - cashback" in val_a:
+                        for col_idx in [2, 3, 4]: # B, C, D
+                            cell = data2_sheet.cell(row=r, column=col_idx)
+                            val = cell.value
+                            if val is not None and val != "":
+                                num_val = None
+                                if isinstance(val, (int, float)):
+                                    num_val = float(val)
+                                elif isinstance(val, str):
+                                    cleaned = val.replace(',', '').strip()
+                                    cleaned_num = ''.join(c for c in cleaned if c.isdigit() or c == '.' or c == '-')
+                                    if cleaned_num:
+                                        try:
+                                            num_val = float(cleaned_num)
+                                        except ValueError:
+                                            pass
+                                
+                                if num_val is not None:
+                                    m_cell = data2_sheet.cell(row=r, column=13)
+                                    m_cell.value = abs(num_val)
+                                    m_cell.number_format = '0.00'
+                                    found_cells.append(f"'{data2_sheet.title}'!{m_cell.coordinate}")
+                                    break
+                
+                if found_cells:
+                    target_cell = cashflow.cell(row=row, column=week_col)
+                    existing_formula = str(target_cell.value or "")
+                    addition = "".join([f"+{c}" for c in found_cells])
+                    
+                    if existing_formula.startswith("="):
+                        target_cell.value = existing_formula + addition
+                    elif existing_formula == "0" or not existing_formula:
+                        target_cell.value = "=" + addition.lstrip("+")
+                    else:
+                        target_cell.value = "=" + str(target_cell.value) + addition
+                    
+                    target_cell.number_format = '0.00'
+                    print(f"Added {len(found_cells)} 'Discount Deduction - Cashback' rows to Paid by Restaurant via col M")
     else:
         print(f"Warning: Data2 sheet '{data2_sheet_name}' not found for week {week}")
 
