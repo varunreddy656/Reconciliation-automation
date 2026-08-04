@@ -10,30 +10,74 @@ import time
 # ----------------- Helper Functions -----------------
 
 def extract_swiggy_start_day(filepath):
+    filename = Path(filepath).name
+    print(f"--- Extracting start day for {filename} ---")
+    
+    # Primary: try parsing filename for start date
+    # Usually filenames might look like 01_Sep_2025_07_Sep_2025 or similar
+    date_match = re.search(r'(\d{1,2})_([A-Za-z]{3})_\d{4}', filename)
+    if date_match:
+        extracted_day = int(date_match.group(1))
+        print(f"✅ Found start day {extracted_day} from filename.")
+        return extracted_day
+
+    # Secondary: robust scan across Summary sheet
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
         sheet = wb["Summary"]
-        text = str(sheet["C12"].value)
+        text_found = None
+        
+        # Scan first 20 rows, cols 1-6 for anything matching a date range
+        for r in range(1, 21):
+            for c in range(1, 7):
+                val = str(sheet.cell(row=r, column=c).value or "").strip()
+                # Pattern: "10 th Oct to 16 th Oct", "01-10 to 07-10", "1st August 2023 - 7th August 2023"
+                if re.search(r"(\d{1,2})\s*(?:st|nd|rd|th)?\s*[a-zA-Z]{0,9}.*?[-to]+\s*(\d{1,2})", val, re.IGNORECASE):
+                    text_found = val
+                    print(f"🔍 Found date pattern at R{r}C{c}: '{val}'")
+                    break
+            if text_found:
+                break
+                
+        # Fallback to C12 if not found via search
+        if not text_found:
+            text_found = str(sheet["C12"].value or "")
+            print(f"⚠️ No pattern found in scan, falling back to C12: '{text_found}'")
+            
         wb.close()
-    except:
+    except Exception as e:
+        print(f"❌ Error reading Excel file {filename}: {e}")
         return None
-    m = re.search(r"(\d+)\s*.*?[-to]+\s*(\d+)", text, re.IGNORECASE)
+
+    # Parse the start day from the found text
+    m = re.search(r"(\d{1,2})\s*.*?[-to]+\s*(\d{1,2})", text_found, re.IGNORECASE)
     if m:
-        return int(m.group(1))
+        extracted_day = int(m.group(1))
+        print(f"✅ Extracted start day {extracted_day} from text '{text_found}'.")
+        return extracted_day
+        
+    print(f"❌ Failed to extract start day from text '{text_found}'.")
     return None
 
 
 def detect_platform(fp):
+    filename = Path(fp).name
     try:
         wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
         sheets = wb.sheetnames
         wb.close()
-    except:
+    except Exception as e:
+        print(f"❌ detect_platform failed to open {filename}: {e}")
         return None
+        
+    if "Order Level" in sheets and "Summary" in sheets:
+        return "Swiggy"
     if "Other charges and deductions" in sheets:
         return "Swiggy"
     if "Addition Deductions Details" in sheets:
         return "Zomato"
+        
+    print(f"⚠️ detect_platform: File {filename} not recognized as Zomato or Swiggy. Sheets found: {sheets}")
     return None
 
 
@@ -248,21 +292,26 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
                     if any(h in val_a for h in ad_headers):
-                        # Find value in Column B, C, or D until found
+                        # Find value in Column B, C, D, E, F until found
                         target_val_cell = None
-                        for col_idx in [2, 3, 4]: # B, C, D
-                            cell = data2_sheet.cell(row=row_idx if 'row_idx' in locals() else r, column=col_idx)
+                        for col_idx in [2, 3, 4, 5, 6]: # B, C, D, E, F
+                            cell = data2_sheet.cell(row=r, column=col_idx)
                             val = cell.value
                             
-                            # Check if the value is valid (numeric or string starting with ₹ or digit)
+                            # Check if the value is valid (numeric and not a date)
                             is_valid = False
                             if val is not None and val != "":
-                                if isinstance(val, (int, float)):
+                                if isinstance(val, (int, float)) and not isinstance(val, bool):
                                     is_valid = True
                                 elif isinstance(val, str):
                                     cleaned = val.strip()
-                                    if cleaned and (cleaned.startswith('₹') or cleaned[0].isdigit() or (cleaned.startswith('-') and len(cleaned) > 1 and cleaned[1].isdigit())):
-                                        is_valid = True
+                                    cleaned_num = cleaned.replace('₹', '').replace(',', '').strip()
+                                    if cleaned_num:
+                                        try:
+                                            float(cleaned_num)
+                                            is_valid = True
+                                        except ValueError:
+                                            pass
                             
                             if is_valid:
                                 target_val_cell = cell
@@ -640,13 +689,17 @@ def process_invoices_web(
         invoice_files = list(folder.glob("*.xlsx"))
         invoices = []
         for fp in invoice_files:
+            filename = Path(fp).name
             plat = detect_platform(fp)
             if plat == "Swiggy":
                 d = extract_swiggy_start_day(fp)
                 if d is not None:
                     invoices.append((d, fp, plat))
+                    print(f"✅ Accepted Swiggy invoice: {filename} with start day {d}")
                 else:
-                    print(f"Skipping {fp}: Could not parse start day")
+                    print(f"❌ Skipping {filename}: Could not parse start day")
+            else:
+                print(f"❌ Skipping {filename}: Platform not detected as Swiggy (Detected: {plat})")
         if not invoices:
             return {
                 'success': False,
@@ -662,9 +715,17 @@ def process_invoices_web(
         week_ranges = generate_week_ranges(first_week_start, first_week_end, last_week_start, last_week_end)
 
         def find_week_for_day(day):
+            print(f"   🔍 Trying to map day {day} to week ranges: {week_ranges}")
             for idx, (low, high) in enumerate(week_ranges, start=1):
-                if low <= day <= high:
-                    return idx
+                if low <= high:
+                    if low <= day <= high:
+                        print(f"   ✅ Day {day} falls into Week {idx} ({low} to {high})")
+                        return idx
+                else:
+                    if day >= low or day <= high:
+                        print(f"   ✅ Day {day} falls into spillover Week {idx} ({low} to {high})")
+                        return idx
+            print(f"   ❌ Day {day} did not match any week ranges")
             return None
 
         week_map, summary_sheet = {}, ensure_sheet(recon, "Summary")
@@ -718,10 +779,20 @@ def process_invoices_web(
                 
             # Copy data sheets
             ol = wb_invoice["Order Level"]
-            add = wb_invoice["Other charges and deductions"]
             d1, d2 = ensure_sheet(recon, f"D1W{week}"), ensure_sheet(recon, f"D2W{week}")
             copy_data(ol, d1, 3)
-            copy_data(add, d2, 4)
+            
+            add_sheet_found = False
+            for sn in wb_invoice.sheetnames:
+                if "Other charges and deductions" in sn or "Growth Investments" in sn:
+                    add = wb_invoice[sn]
+                    copy_data(add, d2, 4)
+                    print(f"✅ Copied deductions sheet: '{sn}'")
+                    add_sheet_found = True
+                    break
+            
+            if not add_sheet_found:
+                print(f"⚠️ Deductions/Growth sheet not found in {fp}, proceeding without it.")
             
             # Extract Total Orders directly using robust dynamic search
             total_orders = None
