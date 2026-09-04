@@ -428,7 +428,8 @@ def upload_files():
         else:
             return jsonify({
                 'success': False,
-                'message': result.get('message', 'Processing failed')
+                'message': result.get('message', 'Processing failed'),
+                'traceback': result.get('traceback', '')
             })
 
     except Exception as e:

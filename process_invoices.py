@@ -1375,7 +1375,7 @@ def process_zomato_recon(
 
         total_weeks = len(week_plan)
         week_ctr_map = {}
-        week_expected_map = {wn: 0.0 for wn in range(1, 7)} # Track expected payout numerically
+        week_expected_map = {}  # Keyed by week_num, populated dynamically
 
         for idx, week_info in enumerate(week_plan):
             # Update progress
@@ -1451,12 +1451,12 @@ def process_zomato_recon(
                         if spillover_result['closing_spillover'] != 0:
                             closing_spillover_value = spillover_result['closing_spillover']
                             closing_week_num = week_num
-                            week_expected_map[week_num] += closing_spillover_value
+                            week_expected_map[week_num] = week_expected_map.get(week_num, 0.0) + closing_spillover_value
                             print(f"  📝 Captured closing spillover: {closing_spillover_value} (Week {week_num})")
 
                     perform_calculations_on_data1(recon, d1, week_num, output_path)
                     d1_total = map_values_to_cashflow(recon, d1, week_num)
-                    week_expected_map[week_num] += d1_total
+                    week_expected_map[week_num] = week_expected_map.get(week_num, 0.0) + d1_total
 
                     total_orders = count_total_orders_from_d1w(d1, header_row=5)
                     summary_col = 3 + (week_num - 1)
@@ -1532,7 +1532,7 @@ def process_zomato_recon(
                 # Map D2W values to Cashflow (always call this to check D1W as well)
                 print(f"  🔗 Mapping week-wise deductions (D2W/D1W) to Cashflow...")
                 d2_total = map_d2w_values_to_cashflow(recon, d2, week_num)
-                week_expected_map[week_num] += d2_total
+                week_expected_map[week_num] = week_expected_map.get(week_num, 0.0) + d2_total
 
             finally:
                 wb_invoice.close()
@@ -1616,10 +1616,12 @@ def process_zomato_recon(
 
     except Exception as e:
         import traceback
+        tb = traceback.format_exc()
         traceback.print_exc()
         return {
             'success': False,
-            'message': f'Processing error: {str(e)}'
+            'message': f'Processing error: {str(e)}',
+            'traceback': tb
         }
 
 
