@@ -166,7 +166,8 @@ def get_progress(task_id):
         if os.path.exists(progress_file):
             with open(progress_file, 'r') as f:
                 progress = f.read().strip()
-                return jsonify({'progress': int(progress)})
+                if progress:
+                    return jsonify({'progress': int(progress)})
     except Exception as e:
         print(f"⚠️ Error reading progress file: {e}")
     
