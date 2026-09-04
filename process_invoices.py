@@ -216,6 +216,11 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
                                 break
                     break
 
+        if start_day and start_month and not end_day:
+            end_day = start_day
+            end_month = start_month
+            end_year = start_year
+
         if not all([start_day, start_month, end_day, end_month]):
             print(f"   ❌ Could not parse dates from filename")
             return None
@@ -749,9 +754,7 @@ def map_values_to_cashflow(wb, data1_sheet, week, week_type="normal"):
     if week_type == "opening_adj":
         week_col = 2
     elif week_type == "closing_adj":
-        week_col = 8  # Use column H (8) for closing adjustments
-    elif week == 5:
-        week_col = 7  # Week 5 goes to column G (7)
+        week_col = 8
     else:
         week_col = 3 + (week - 1)
 
@@ -1199,11 +1202,6 @@ def map_zomato_bank_to_actual_receipts(recon_wb, week_ctr_map):
             print(f"    📝 Setting Cashflow col {col} to 0")
             
     print(f"🏦 --- END ZOMATO BANK MAPPING ---\n")
-
-    print(f"Adding note: {note}")
-    cashflow.cell(row=42, column=2).value = note
-    if discrepancies:
-        discrepancies.cell(row=26, column=1).value = note
 
 def add_zomato_notepoints(recon_wb, num_weeks, has_bank, week_expected_map=None):
     cashflow = recon_wb["Cashflow"]

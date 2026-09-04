@@ -18,24 +18,26 @@ def ordinal(n):
         return str(n)
 
 def get_week_ranges(first_start, first_end, last_start, last_end):
-    """Calculates 5 week ranges based on the first and last week input."""
+    """Calculates week ranges dynamically based on the first and last week input."""
     try:
         f_s, f_e = int(float(first_start)), int(float(first_end))
         l_s, l_e = int(float(last_start)), int(float(last_end))
         
-        # Week 1: f_s to f_e
-        # Week 2: f_e + 1 to f_e + 7
-        # Week 3: f_e + 8 to f_e + 14
-        # Week 4: f_e + 15 to f_e + 21
-        # Week 5: l_s to l_e
-        
-        return [
-            (f_s, f_e),
-            (f_e + 1, f_e + 7),
-            (f_e + 8, f_e + 14),
-            (f_e + 15, f_e + 21),
-            (l_s, l_e)
-        ], [f_s, f_e, f_e+1, f_e+7, f_e+8, f_e+14, f_e+15, f_e+21, l_s, l_e]
+        weeks = [(f_s, f_e)]
+        curr_start = f_e + 1
+        while curr_start < l_s:
+            curr_end = curr_start + 6
+            if curr_end >= l_s:
+                curr_end = l_s - 1
+            if curr_start <= curr_end:
+                weeks.append((curr_start, curr_end))
+            curr_start = curr_end + 1
+            
+        weeks.append((l_s, l_e))
+        flat_list = []
+        for ws, we in weeks:
+            flat_list.extend([ws, we])
+        return weeks, flat_list
     except:
         return [], []
 

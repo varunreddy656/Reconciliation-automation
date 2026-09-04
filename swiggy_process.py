@@ -292,9 +292,9 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
                     if any(h in val_a for h in ad_headers):
-                        # Find value in Column B, C, D, E, F until found
+                        # Find value in Column B onwards until found
                         target_val_cell = None
-                        for col_idx in [2, 3, 4, 5, 6]: # B, C, D, E, F
+                        for col_idx in range(2, data2_sheet.max_column + 1):
                             cell = data2_sheet.cell(row=r, column=col_idx)
                             val = cell.value
                             
@@ -336,8 +336,8 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
                     if "previous week outstanding" in val_a:
-                        # Find value in Column B, C, or D until found
-                        for col_idx in [2, 3, 4]: # B, C, D
+                        # Find value in Column B onwards until found
+                        for col_idx in range(2, data2_sheet.max_column + 1):
                             cell = data2_sheet.cell(row=r, column=col_idx)
                             if cell.value is not None and cell.value != "":
                                 found_cells.append(f"'{data2_sheet.title}'!{cell.coordinate}")
@@ -359,7 +359,7 @@ def map_values_to_cashflow(wb, data1_sheet, week):
                 for r in range(1, data2_sheet.max_row + 1):
                     val_a = str(data2_sheet.cell(row=r, column=1).value or "").strip().lower()
                     if "discount deduction - cashback" in val_a:
-                        for col_idx in [2, 3, 4]: # B, C, D
+                        for col_idx in range(2, data2_sheet.max_column + 1):
                             cell = data2_sheet.cell(row=r, column=col_idx)
                             val = cell.value
                             if val is not None and val != "":
@@ -413,23 +413,24 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
         print("Required columns missing")
         return
 
-    delivered = [0] * (82 - item_total_col)
-    cancelled = [0] * (82 - item_total_col)
+    num_cols = max(1, data1_sheet.max_column - item_total_col + 1)
+    delivered = [0] * num_cols
+    cancelled = [0] * num_cols
 
     for row in range(6, data1_sheet.max_row + 1):
         status = str(data1_sheet.cell(row=row, column=order_status_col).value).strip().lower()
         if status not in ["delivered", "cancelled"]: continue
         target = delivered if status == "delivered" else cancelled
-        for i, col in enumerate(range(item_total_col, 82)):
+        for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
             val = data1_sheet.cell(row=row, column=col).value
             if isinstance(val, (int, float)): target[i] += val
 
-    for i, col in enumerate(range(item_total_col, 82)):
+    for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
         data1_sheet.cell(row=4, column=col).value = delivered[i] + cancelled[i]
         data1_sheet.cell(row=2, column=col).value = delivered[i]
         data1_sheet.cell(row=1, column=col).value = cancelled[i]
 
-    for col in range(item_total_col, 82):
+    for col in range(item_total_col, data1_sheet.max_column + 1):
         val = data1_sheet.cell(row=4, column=col).value
         data1_sheet.cell(row=3, column=col).value = val * 1.18 if isinstance(val, (int, float)) else 0
 

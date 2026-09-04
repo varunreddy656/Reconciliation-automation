@@ -124,9 +124,14 @@ def aggregate_pos(df, pos_type, week_ranges=None, custom_dinein_ranges=None):
         if df.empty:
             return {"weeks": [], "channels": [], "message": "No data found"}
 
-        # Initialize default weeks
+        def format_ord(n):
+            if 11 <= (n % 100) <= 13: return f"{n}th"
+            suffixes = {1: "st", 2: "nd", 3: "rd"}
+            return f"{n}{suffixes.get(n % 10, 'th')}"
+
         weeks = ["Week 1 (1st-7th)", "Week 2 (8th-14th)", "Week 3 (15th-21st)", "Week 4 (22nd-28th)", "Week 5 (29th+)"]
-        
+        bound_ranges = []
+
         f_start = f_end = l_start = l_end = None
         if week_ranges:
             try:
@@ -136,19 +141,33 @@ def aggregate_pos(df, pos_type, week_ranges=None, custom_dinein_ranges=None):
                 l_start = pd.to_datetime(week_ranges.get('l_start')).date() if week_ranges.get('l_start') else None
                 l_end = pd.to_datetime(week_ranges.get('l_end')).date() if week_ranges.get('l_end') else None
                 
-                # Update labels dynamically using Rolling 7-day logic
-                if f_start and f_end:
-                    w1_e = f_end.day
-                    w5_s = l_start.day if l_start else 29
+                if f_start and f_end and l_start and l_end:
+                    weeks = []
+                    bound_ranges = []
+                    w1_s, w1_e = f_start.day, f_end.day
+                    l_s, l_e = l_start.day, l_end.day
                     
-                    weeks[0] = f"Week 1 ({f_start.day}{'st' if f_start.day==1 else 'th'}-{w1_e}th)"
-                    weeks[1] = f"Week 2 ({w1_e + 1}th-{w1_e + 7}th)"
-                    weeks[2] = f"Week 3 ({w1_e + 8}th-{w1_e + 14}th)"
-                    weeks[3] = f"Week 4 ({w1_e + 15}th-{w5_s - 1}th)"
-                
-                if l_start and l_end:
-                    weeks[4] = f"Week 5 ({l_start.day}th-{l_end.day}th)"
+                    wn = 1
+                    label1 = f"Week {wn} ({format_ord(w1_s)}-{format_ord(w1_e)})"
+                    weeks.append(label1)
+                    bound_ranges.append((w1_s, w1_e, label1))
                     
+                    curr_s = w1_e + 1
+                    while curr_s < l_s:
+                        wn += 1
+                        curr_e = curr_s + 6
+                        if curr_e >= l_s:
+                            curr_e = l_s - 1
+                        if curr_s <= curr_e:
+                            lbl = f"Week {wn} ({format_ord(curr_s)}-{format_ord(curr_e)})"
+                            weeks.append(lbl)
+                            bound_ranges.append((curr_s, curr_e, lbl))
+                        curr_s = curr_e + 1
+                        
+                    wn += 1
+                    label_last = f"Week {wn} ({format_ord(l_s)}-{format_ord(l_e)})"
+                    weeks.append(label_last)
+                    bound_ranges.append((l_s, l_e, label_last))
             except Exception as week_err:
                 print(f"⚠️ Week Range Parsing Error: {week_err}")
 
@@ -157,11 +176,15 @@ def aggregate_pos(df, pos_type, week_ranges=None, custom_dinein_ranges=None):
             d = dt.date() if hasattr(dt, 'date') else dt
             day = d.day
             
-            # Dynamic Boundaries
+            if bound_ranges:
+                for low, high, lbl in bound_ranges:
+                    if low <= day <= high:
+                        return lbl
+                return bound_ranges[-1][2]
+            
+            # Default 5-week fallback
             w1_end = s_end.day if s_end else 7
             w5_start = e_start.day if e_start else 29
-            
-            # Rolling 7-day pattern for middle weeks
             w2_end = w1_end + 7
             w3_end = w2_end + 7
             
@@ -169,7 +192,7 @@ def aggregate_pos(df, pos_type, week_ranges=None, custom_dinein_ranges=None):
             if day <= w2_end: return weeks[1]
             if day <= w3_end: return weeks[2]
             if day < w5_start: return weeks[3]
-            return weeks[4]
+            return weeks[-1]
 
         # Pre-calculate labels using separate logic for Global and Swiggy
         df['Week_Global'] = df['Transaction_Date'].apply(lambda x: get_label(x, f_start, f_end, l_start, l_end))
