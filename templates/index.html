@@ -895,12 +895,20 @@
       { start: 'swiggyLastWeekStart', end: 'swiggyLastWeekEnd', text: 'swiggyLastWeekText', display: 'swiggyLastWeekDisplay', standalone: true }
     ];
 
+    function formatRangeText(dateStr) {
+      if (!dateStr || dateStr === 'Select dates') return dateStr;
+      if (!dateStr.includes(' to ')) {
+        return `${dateStr} to ${dateStr}`;
+      }
+      return dateStr;
+    }
+
     function saveRanges() {
       const data = {};
       RANGE_PAIRS.forEach(p => {
         data[p.start] = document.getElementById(p.start).value;
         data[p.end] = document.getElementById(p.end).value;
-        data[p.text] = document.getElementById(p.text).textContent;
+        data[p.text] = formatRangeText(document.getElementById(p.text).textContent);
       });
       localStorage.setItem('reconRanges', JSON.stringify(data));
     }
@@ -913,7 +921,7 @@
         if (data[p.start]) {
           document.getElementById(p.start).value = data[p.start];
           document.getElementById(p.end).value = data[p.end];
-          document.getElementById(p.text).textContent = data[p.text];
+          document.getElementById(p.text).textContent = formatRangeText(data[p.text]);
         }
       });
     }
@@ -934,14 +942,16 @@
         mode: "range",
         dateFormat: "Y-m-d",
         onChange: function (selectedDates, dateStr, instance) {
-          if (selectedDates.length === 2) {
+          if (selectedDates.length > 0) {
             const startDate = selectedDates[0].getDate();
-            const endDate = selectedDates[1].getDate();
+            const endDate = selectedDates.length === 2 ? selectedDates[1].getDate() : startDate;
 
             // Apply to this input
             startInput.value = startDate;
             endInput.value = endDate;
-            textSpan.textContent = dateStr;
+
+            const formattedText = formatRangeText(dateStr);
+            textSpan.textContent = formattedText;
 
             // --- SYNC LOGIC ---
             // If this is NOT a swiggy input, sync with other non-swiggy inputs
@@ -954,7 +964,7 @@
                   if (targetIsFirst === isFirstWeek) {
                     document.getElementById(p.start).value = startDate;
                     document.getElementById(p.end).value = endDate;
-                    document.getElementById(p.text).textContent = dateStr;
+                    document.getElementById(p.text).textContent = formattedText;
                   }
                 }
               });
@@ -1085,7 +1095,12 @@
         allowInput: true,
         altInput: true,
         altFormat: "F j, Y",
-        theme: "dark"
+        theme: "dark",
+        onClose: function(selectedDates, dateStr, instance) {
+          if (selectedDates.length === 1) {
+            instance.setDate([selectedDates[0], selectedDates[0]], true);
+          }
+        }
       });
     }
 
@@ -1209,6 +1224,18 @@
       }
     });
 
+    function parsePosRangeInput(elementId) {
+      const el = document.getElementById(elementId);
+      if (!el || !el.value) return [null, null];
+      const val = el.value.trim();
+      if (!val) return [null, null];
+      const parts = val.split(' to ');
+      if (parts.length === 1 && parts[0]) {
+        return [parts[0].trim(), parts[0].trim()];
+      }
+      return [parts[0] ? parts[0].trim() : null, parts[1] ? parts[1].trim() : null];
+    }
+
     async function handlePosExtraction() {
       const fileInput = document.getElementById('pos-file-input');
       if (!fileInput.files || !fileInput.files[0]) {
@@ -1220,19 +1247,19 @@
       formData.append('file', fileInput.files[0]);
 
       // Global Ranges
-      const gF = document.getElementById('pos_global_f_range').value.split(' to ');
-      const gL = document.getElementById('pos_global_l_range').value.split(' to ');
+      const [fStart, fEnd] = parsePosRangeInput('pos_global_f_range');
+      const [lStart, lEnd] = parsePosRangeInput('pos_global_l_range');
       
       // Swiggy Ranges
-      const sF = document.getElementById('pos_swiggy_f_range').value.split(' to ');
-      const sL = document.getElementById('pos_swiggy_l_range').value.split(' to ');
+      const [sFStart, sFEnd] = parsePosRangeInput('pos_swiggy_f_range');
+      const [sLStart, sLEnd] = parsePosRangeInput('pos_swiggy_l_range');
 
       const weekRanges = {
-        f_start: gF[0], f_end: gF[1],
-        l_start: gL[0], l_end: gL[1],
+        f_start: fStart, f_end: fEnd,
+        l_start: lStart, l_end: lEnd,
         swiggy: {
-          f_start: sF[0], f_end: sF[1],
-          l_start: sL[0], l_end: sL[1]
+          f_start: sFStart, f_end: sFEnd,
+          l_start: sLStart, l_end: sLEnd
         }
       };
 
@@ -1243,7 +1270,6 @@
         formData.append('custom_dinein_ranges', customRanges);
       }
 
-      const fStart = gF[0], fEnd = gF[1], lStart = gL[0], lEnd = gL[1];
       if (!fStart || !fEnd || !lStart || !lEnd) {
         showToast('Please provide Global week ranges (Select both Start and End dates)', 'warning');
         return;
