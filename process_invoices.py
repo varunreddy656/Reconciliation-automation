@@ -1391,9 +1391,11 @@ def process_zomato_recon(
                 print(f"\n--- Week {week_num}: {week_info['week_label']} - SKIPPED (no invoice) ---")
                 continue
 
-            print(f"\n--- Processing {fp.name} → Week {week_num} ---")
-
-            wb_invoice = openpyxl.load_workbook(fp, data_only=True)
+            try:
+                wb_invoice = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+            except Exception as e_ro:
+                print(f"⚠️ Could not load {fp.name} in read_only mode ({e_ro}), trying standard load...")
+                wb_invoice = openpyxl.load_workbook(fp, data_only=True)
 
             try:
                 possible_order_sheets = [
@@ -1573,7 +1575,10 @@ def process_zomato_recon(
         bank_wb = None
         try:
             if bank_file_path:
-                bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False)
+                try:
+                    bank_wb = openpyxl.load_workbook(bank_file_path, data_only=True, read_only=True)
+                except Exception:
+                    bank_wb = openpyxl.load_workbook(bank_file_path, data_only=False)
                 # Copy bank sheet to recon
                 if "BANK" in recon.sheetnames:
                     recon_bank = recon["BANK"]

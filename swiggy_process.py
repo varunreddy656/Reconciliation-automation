@@ -756,8 +756,10 @@ def process_invoices_web(
             week_map[fp] = week
             print(f"\nProcessing {fp} → Week {week}")
             
-            # OPTIMIZATION: Open workbook ONCE
-            wb_invoice = openpyxl.load_workbook(fp, data_only=True)
+            try:
+                wb_invoice = openpyxl.load_workbook(fp, data_only=True, read_only=True)
+            except Exception:
+                wb_invoice = openpyxl.load_workbook(fp, data_only=True)
             
             # Extract Expected Receipt from Summary sheet directly
             expected_receipt = None
