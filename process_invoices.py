@@ -173,76 +173,59 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
 
 def match_invoice_to_week(invoice_filename, week_structure, month):
     """
-    Match invoice filename to correct week in structure
+    Match invoice filename to correct week in structure.
+    Handles both underscore-separated and space-separated date tokens.
     Returns: week_num or None if no match
     """
     try:
         # Remove .xlsx/.xls extension
         name_without_ext = invoice_filename.replace('.xlsx', '').replace('.xls', '')
 
-        # Split by underscore
-        parts = name_without_ext.split('_')
+        print(f"\n[INFO] Parsing invoice: {invoice_filename}")
 
-        print(f"\n🔍 Parsing invoice: {invoice_filename}")
-        print(f"   Parts: {parts}")
+        # ---- Robust date extraction via regex (works for both _ and space separators) ----
+        # Pattern: DD Mon YYYY (e.g. 27 Jul 2026 or 02 Aug 2026)
+        MONTH_ABBRS = 'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
+        date_pattern = re.compile(
+            r'(\d{1,2})[_ ]+(' + MONTH_ABBRS + r')[_ ]+(\d{4})',
+            re.IGNORECASE
+        )
+        found_dates = date_pattern.findall(name_without_ext)
+        print(f"   Parts found: {found_dates}")
 
-        start_day, start_month, start_year = None, None, datetime.now().year
-        end_day, end_month, end_year = None, None, datetime.now().year
-
-        # Find first date (start)
-        for i in range(len(parts) - 1):
-            if parts[i].isdigit() and len(parts[i]) <= 2:
-                if i + 1 < len(parts) and parts[i + 1][:3].capitalize() in [
-                    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-                ]:
-                    start_day = int(parts[i])
-                    start_month = parts[i + 1][:3].capitalize()
-                    if i + 2 < len(parts) and parts[i + 2].isdigit() and len(parts[i + 2]) == 4:
-                        start_year = int(parts[i + 2])
-                        end_year = start_year # Default until found otherwise
-
-                    # Now find end date
-                    for j in range(i + 2, len(parts) - 1):
-                        if parts[j].isdigit() and len(parts[j]) <= 2:
-                            if j + 1 < len(parts) and parts[j + 1][:3].capitalize() in [
-                                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-                            ]:
-                                end_day = int(parts[j])
-                                end_month = parts[j + 1][:3].capitalize()
-                                if j + 2 < len(parts) and parts[j + 2].isdigit() and len(parts[j + 2]) == 4:
-                                    end_year = int(parts[j + 2])
-                                break
-                    break
-
-        if start_day and start_month and not end_day:
-            end_day = start_day
-            end_month = start_month
-            end_year = start_year
-
-        if not all([start_day, start_month, end_day, end_month]):
-            print(f"   ❌ Could not parse dates from filename")
-            return None
-
-        # Convert month names to numbers
         month_map = {
             'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
             'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
         }
-        start_month_num = month_map[start_month]
-        end_month_num = month_map[end_month]
+
+        if len(found_dates) < 1:
+            print(f"   [WARN] Could not parse any dates from filename")
+            return None
+
+        # First date = start, second date = end (if present)
+        sd, sm, sy = found_dates[0]
+        start_day = int(sd)
+        start_month_num = month_map[sm[:3].capitalize()]
+        start_year = int(sy)
+
+        if len(found_dates) >= 2:
+            ed, em, ey = found_dates[1]
+            end_day = int(ed)
+            end_month_num = month_map[em[:3].capitalize()]
+            end_year = int(ey)
+        else:
+            end_day, end_month_num, end_year = start_day, start_month_num, start_year
 
         try:
-           invoice_start = datetime(start_year, start_month_num, start_day)
-           invoice_end = datetime(end_year, end_month_num, end_day)
-           print(f"   ✅ Parsed: {invoice_start.date()} to {invoice_end.date()}")
-        except ValueError:
-           print(f"   ❌ Invalid date range in filename")
-           return None
+            invoice_start = datetime(start_year, start_month_num, start_day)
+            invoice_end = datetime(end_year, end_month_num, end_day)
+            print(f"   [OK] Parsed: {invoice_start.date()} to {invoice_end.date()}")
+        except ValueError as ve:
+            print(f"   [ERR] Invalid date range in filename: {ve}")
+            return None
 
     except Exception as e:
-        print(f"   ❌ Error parsing invoice filename: {e}")
+        print(f"   [ERR] Error parsing invoice filename: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -252,27 +235,24 @@ def match_invoice_to_week(invoice_filename, week_structure, month):
         # 1. Exact Match
         if (week['start_date'].date() == invoice_start.date() and
                 week['end_date'].date() == invoice_end.date()):
-            print(f"   ✅ MATCHED (Exact) to Week {week['week_num']}")
+            print(f"   [OK] MATCHED (Exact) to Week {week['week_num']}")
             return week['week_num']
-        
-        # 2. End-Date Match (Handles Spillover Start)
-        # If invoice ends on the same day as the week, it's likely the right one
-        # especially for Week 1 where the week starts at 1st but invoice starts earlier
-        if week['end_date'].date() == invoice_end.date():
-             print(f"   ✅ MATCHED (End Date) to Week {week['week_num']}")
-             return week['week_num']
 
-        # 3. Overlap Check (Fallback)
-        # If the invoice covers the majority of the week
+        # 2. End-Date Match (handles spillover-start weeks where invoice starts before month)
+        if week['end_date'].date() == invoice_end.date():
+            print(f"   [OK] MATCHED (End Date) to Week {week['week_num']}")
+            return week['week_num']
+
+        # 3. Overlap Check (Fallback) - if invoice overlaps majority of the week
         overlap_start = max(week['start_date'], invoice_start)
         overlap_end = min(week['end_date'], invoice_end)
         if overlap_start < overlap_end:
             overlap_days = (overlap_end - overlap_start).days + 1
-            if overlap_days >= 3: # Major overlap
-                print(f"   ✅ MATCHED (Overlap) to Week {week['week_num']}")
+            if overlap_days >= 3:
+                print(f"   [OK] MATCHED (Overlap) to Week {week['week_num']}")
                 return week['week_num']
 
-    print(f"   ⚠️ No matching week found")
+    print(f"   [WARN] No matching week found for {invoice_start.date()} to {invoice_end.date()}")
     return None
 
 
