@@ -1,10 +1,20 @@
 
 import os
+import sys
 import openpyxl
 import re
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import gc
+
+def safe_print(*args, **kwargs):
+    """Print that handles encoding errors (e.g. emoji on Windows cp1252)."""
+    try:
+        print(*args, **kwargs)
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        msg = ' '.join(str(a) for a in args)
+        safe_msg = msg.encode('ascii', errors='replace').decode('ascii')
+        print(safe_msg, **{k: v for k, v in kwargs.items() if k != 'flush'})
 
 def ordinal(n):
     """Convert number to ordinal (1→1st, 2→2nd, 3→3rd, etc.)"""
@@ -94,11 +104,11 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             file.save(temp_path)
             temp_files.append(temp_path)
 
-            print(f"📖 Opening Zomato Pay file: {filename}", flush=True)
+            safe_print(f"[INFO] Opening Zomato Pay file: {filename}", flush=True)
             try:
                 wb_in = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
             except Exception as e_wb:
-                print(f"⚠️ read_only mode failed ({e_wb}), falling back to standard load...", flush=True)
+                safe_print(f"[WARN] read_only mode failed ({e_wb}), falling back to standard load...", flush=True)
                 wb_in = openpyxl.load_workbook(temp_path, data_only=True)
             
             # Capture Transactions - search for header row dynamically
@@ -150,7 +160,7 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             wb_in.close()
         
         if update_progress: update_progress(35)
-        print("✅ Finished reading all input files.", flush=True)
+        safe_print("[OK] Finished reading all input files.", flush=True)
 
         # 3. Batch Write to Template (Fast Append)
         # Create 14 row gap as requested

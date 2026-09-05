@@ -156,41 +156,67 @@ def parse_day_input(val, default=1):
         return int(nums[-1])
     return default
 
+# ─── In-memory task store (primary) + file fallback ─────────────────────────
+# With workers=1 (single Gunicorn process), all threads share this dict
+_task_store = {}  # {task_id: {progress, status, success, message, ...}}
+
+
 def set_task_result(task_id, result_data):
-    """Write JSON task result file for completion/failure tracking"""
-    if task_id:
-        try:
-            result_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.result")
-            with open(result_file, 'w') as f:
-                json.dump(result_data, f)
-            print(f"Task {task_id} result saved: success={result_data.get('success')}", flush=True)
-        except Exception as e:
-            print(f"⚠️ Error writing result file: {e}", flush=True)
+    """Store task result in memory (primary) AND file (fallback)"""
+    if not task_id:
+        return
+    _task_store[task_id] = result_data
+    try:
+        result_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.result")
+        with open(result_file, 'w') as f:
+            json.dump(result_data, f)
+        print(f"Task {task_id} result saved: success={result_data.get('success')}", flush=True)
+    except Exception as e:
+        print(f"[WARN] Error writing result file (in-memory still set): {e}", flush=True)
+
 
 # Task Progress Tracking
 def update_progress(task_id, progress):
-    """Update progress for a specific task using a temporary file"""
-    if task_id:
-        try:
-            progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
-            with open(progress_file, 'w') as f:
-                f.write(str(progress))
-            print(f"Task {task_id} progress: {progress}%", flush=True)
-        except Exception as e:
-            print(f"⚠️ Error updating progress file: {e}", flush=True)
+    """Update progress in memory (primary) AND file (fallback)"""
+    if not task_id:
+        return
+    # Update in-memory store
+    if task_id in _task_store:
+        _task_store[task_id]['progress'] = progress
+    else:
+        _task_store[task_id] = {'progress': progress, 'status': 'processing'}
+    # Also write to file
+    try:
+        progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
+        with open(progress_file, 'w') as f:
+            f.write(str(progress))
+        print(f"Task {task_id} progress: {progress}%", flush=True)
+    except Exception as e:
+        print(f"[WARN] Error updating progress file (in-memory still updated): {e}", flush=True)
+
 
 @app.route('/progress/<task_id>')
 def get_progress(task_id):
     """Get current progress and result for a task"""
     try:
-        # 1. Check for finished result
+        # 1. Check in-memory store first (fastest, most reliable)
+        if task_id in _task_store:
+            data = _task_store[task_id]
+            # If completed or failed, also clean up memory after sending
+            if data.get('status') in ('completed', 'failed'):
+                # Keep in store for a bit (don't pop immediately, browser may retry)
+                return jsonify(data)
+            return jsonify(data)
+
+        # 2. Fallback: Check result file
         result_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.result")
         if os.path.exists(result_file):
             with open(result_file, 'r') as f:
                 data = json.load(f)
+                _task_store[task_id] = data  # Restore into memory
                 return jsonify(data)
 
-        # 2. Check for intermediate progress
+        # 3. Fallback: Check progress file
         progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
         if os.path.exists(progress_file):
             with open(progress_file, 'r') as f:
@@ -198,8 +224,8 @@ def get_progress(task_id):
                 if progress:
                     return jsonify({'progress': int(progress), 'status': 'processing'})
     except Exception as e:
-        print(f"⚠️ Error reading progress file: {e}", flush=True)
-    
+        print(f"[WARN] Error reading progress: {e}", flush=True)
+
     return jsonify({'progress': 0, 'status': 'processing'})
 
 @app.route('/')

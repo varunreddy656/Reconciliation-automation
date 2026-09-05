@@ -128,9 +128,12 @@ def generate_week_ranges(first_start, first_end, last_start, last_end, max_day=3
     week_ranges = []
     week_ranges.append((first_start, first_end))
     current_start = first_end + 1
-    while current_start + 6 < last_start:
-        current_end = current_start + 6
-        week_ranges.append((current_start, current_end))
+    # Fixed: use `current_start < last_start` (not `current_start + 6 < last_start`)
+    # so partial middle weeks (e.g. 22-24) are not skipped
+    while current_start < last_start:
+        current_end = min(current_start + 6, last_start - 1)
+        if current_start <= current_end:
+            week_ranges.append((current_start, current_end))
         current_start = current_end + 1
     week_ranges.append((last_start, last_end))
     return week_ranges
