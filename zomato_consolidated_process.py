@@ -6,6 +6,17 @@ from pathlib import Path
 from datetime import datetime
 import calendar
 
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 # Import helpers from process_invoices
 from process_invoices import (
     calculate_week_structure, 

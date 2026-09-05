@@ -10,6 +10,18 @@ from dotenv import load_dotenv
 
 # Load environment variables IMMEDIATELY
 load_dotenv()
+
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 print(f"DEBUG: GROQ_API_KEY loaded: {'Yes' if os.environ.get('GROQ_API_KEY') else 'No'}")
 import tempfile
 from werkzeug.utils import secure_filename

@@ -6,6 +6,17 @@ import uuid
 import os
 import time
 
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 
 # ----------------- Helper Functions -----------------
 
@@ -141,16 +152,18 @@ def generate_week_ranges(first_start, first_end, last_start, last_end, max_day=3
 
 def fast_clear_sheet(ws):
     if ws and ws.max_row > 0:
-        for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
-            for cell in row:
-                cell.value = None
+        try:
+            ws.delete_rows(1, ws.max_row)
+        except Exception:
+            for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+                for cell in row:
+                    cell.value = None
 
 def copy_data(src, tgt, start_row):
-    max_row, max_col = src.max_row, src.max_column
     fast_clear_sheet(tgt)
-    for r in range(start_row, max_row + 1):
-        for c in range(1, max_col + 1):
-            tgt.cell(row=r - start_row + 1, column=c).value = src.cell(row=r, column=c).value
+    for r_idx, row in enumerate(src.iter_rows(min_row=start_row, values_only=True), 1):
+        for c_idx, val in enumerate(row, 1):
+            tgt.cell(row=r_idx, column=c_idx).value = val
 
 
 def extract_total_orders(fp):
@@ -186,10 +199,11 @@ def count_non_zero_complaints(sheet):
         print("Customer Complaints column not found in D1W sheet.")
         return 0
     count = 0
-    for row in range(6, sheet.max_row + 1):
-        value = sheet.cell(row=row, column=complaints_col).value
-        if isinstance(value, (int, float)) and value != 0:
-            count += 1
+    for row_vals in sheet.iter_rows(min_row=6, values_only=True):
+        if row_vals and len(row_vals) >= complaints_col:
+            value = row_vals[complaints_col - 1]
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and value != 0:
+                count += 1
     return count
 
 
@@ -423,13 +437,19 @@ def perform_calculations_on_data1(wb, data1_sheet, week, recon_path):
     delivered = [0] * num_cols
     cancelled = [0] * num_cols
 
-    for row in range(6, data1_sheet.max_row + 1):
-        status = str(data1_sheet.cell(row=row, column=order_status_col).value).strip().lower()
-        if status not in ["delivered", "cancelled"]: continue
+    for row_vals in data1_sheet.iter_rows(min_row=6, values_only=True):
+        if not row_vals or len(row_vals) < order_status_col:
+            continue
+        status = str(row_vals[order_status_col - 1] or "").strip().lower()
+        if status not in ["delivered", "cancelled"]:
+            continue
         target = delivered if status == "delivered" else cancelled
-        for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
-            val = data1_sheet.cell(row=row, column=col).value
-            if isinstance(val, (int, float)): target[i] += val
+        for i in range(num_cols):
+            col_idx = item_total_col - 1 + i
+            if col_idx < len(row_vals):
+                val = row_vals[col_idx]
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    target[i] += val
 
     for i, col in enumerate(range(item_total_col, data1_sheet.max_column + 1)):
         data1_sheet.cell(row=4, column=col).value = delivered[i] + cancelled[i]

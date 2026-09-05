@@ -11,6 +11,17 @@ from datetime import datetime, timedelta
 import calendar
 import tempfile
 
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 # ===================== ZOMATO-SPECIFIC HELPERS =====================
 
 def parse(date_str, dayfirst=True):

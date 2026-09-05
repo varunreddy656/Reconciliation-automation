@@ -7,6 +7,17 @@ import re
 from datetime import datetime
 from process_invoices import calculate_week_structure, ordinal, parse
 
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 def safe_float(val):
     if val is None: return 0.0
     try:

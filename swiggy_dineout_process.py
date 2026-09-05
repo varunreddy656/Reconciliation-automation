@@ -7,6 +7,17 @@ import pandas as pd
 from werkzeug.utils import secure_filename
 import gc
 
+_original_print = print
+def print(*args, **kwargs):
+    try:
+        _original_print(*args, **kwargs)
+    except UnicodeEncodeError:
+        clean_args = [
+            str(a).encode('ascii', 'ignore').decode('ascii') if isinstance(a, str) else a
+            for a in args
+        ]
+        _original_print(*clean_args, **kwargs)
+
 def parse_date_range(date_str):
     """
     Parses a date range string like "01 October - 05 October" or "28 Sep - 05 Oct".
