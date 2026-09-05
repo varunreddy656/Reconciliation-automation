@@ -154,9 +154,9 @@ def update_progress(task_id, progress):
             progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
             with open(progress_file, 'w') as f:
                 f.write(str(progress))
-            print(f"Task {task_id} progress: {progress}%")
+            print(f"Task {task_id} progress: {progress}%", flush=True)
         except Exception as e:
-            print(f"⚠️ Error updating progress file: {e}")
+            print(f"⚠️ Error updating progress file: {e}", flush=True)
 
 @app.route('/progress/<task_id>')
 def get_progress(task_id):

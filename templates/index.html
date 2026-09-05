@@ -1023,12 +1023,14 @@
       }
     }
 
+    let activeTaskId = null;
+
     async function pollProgress(taskId) {
-      if (!taskId) return;
+      if (!taskId || taskId !== activeTaskId) return;
       try {
         const response = await fetch(`/progress/${taskId}`);
         const data = await response.json();
-        if (data.progress !== undefined) {
+        if (data.progress !== undefined && taskId === activeTaskId) {
           updateProgressUI(data.progress);
           if (data.progress < 100) {
             setTimeout(() => pollProgress(taskId), 800);
@@ -1046,8 +1048,9 @@
       // Reset progress UI
       updateProgressUI(0);
 
-      // Generate a task ID
+      // Generate a task ID & set active
       const taskId = 'task_' + Date.now();
+      activeTaskId = taskId;
       const formData = new FormData(form);
       formData.append('task_id', taskId);
 
@@ -1063,6 +1066,7 @@
           throw new Error("Server returned non-JSON response.");
         }
 
+        activeTaskId = null;
         overlay.style.display = 'none';
 
         if (response.ok && result.success) {
@@ -1076,6 +1080,7 @@
           showToast(result.message || 'Processing failed', 'error');
         }
       } catch (err) {
+        activeTaskId = null;
         overlay.style.display = 'none';
         showToast('Transmission Failure: ' + err.message, 'error');
       }

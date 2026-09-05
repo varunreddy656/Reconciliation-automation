@@ -94,7 +94,12 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
             file.save(temp_path)
             temp_files.append(temp_path)
 
-            wb_in = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+            print(f"📖 Opening Zomato Pay file: {filename}", flush=True)
+            try:
+                wb_in = openpyxl.load_workbook(temp_path, read_only=True, data_only=True)
+            except Exception as e_wb:
+                print(f"⚠️ read_only mode failed ({e_wb}), falling back to standard load...", flush=True)
+                wb_in = openpyxl.load_workbook(temp_path, data_only=True)
             
             # Capture Transactions - search for header row dynamically
             if "Transactions summary" in wb_in.sheetnames:
@@ -108,10 +113,22 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         break
                 
                 if header_row_idx != -1:
-                    # Include headers as the first row in processed_data for find_col
-                    rows = list(ws_in.iter_rows(min_row=header_row_idx, values_only=True))
-                    for row in rows:
-                        if any(row): processed_data.append(row)
+                    print(f"  Found header row at line {header_row_idx}, reading transactions...", flush=True)
+                    rows_iter = ws_in.iter_rows(min_row=header_row_idx, values_only=True)
+                    header_row = next(rows_iter, None)
+                    if header_row:
+                        processed_data.append(header_row)
+                    
+                    row_count = 0
+                    for row in rows_iter:
+                        if any(row): 
+                            processed_data.append(row)
+                            row_count += 1
+                            if row_count % 300 == 0:
+                                prog = min(5 + int((row_count / 3000) * 25), 30)
+                                if update_progress: update_progress(prog)
+                                print(f"  Read {row_count} transactions...", flush=True)
+                    print(f"  Finished reading {row_count} transaction rows.", flush=True)
             
             # Capture Ads - search for header row dynamically
             if "Additions & deductions" in wb_in.sheetnames:
@@ -124,12 +141,16 @@ def process_zomato_pay(invoice_files, template_path, output_dir, update_progress
                         break
                 
                 if header_row_idx != -1:
-                    rows = list(ws_in.iter_rows(min_row=header_row_idx, values_only=True))
-                    for row in rows:
+                    rows_iter = ws_in.iter_rows(min_row=header_row_idx, values_only=True)
+                    header_row = next(rows_iter, None)
+                    if header_row:
+                        ads_data.append(header_row)
+                    for row in rows_iter:
                         if any(row): ads_data.append(row)
             wb_in.close()
         
         if update_progress: update_progress(35)
+        print("✅ Finished reading all input files.", flush=True)
 
         # 3. Batch Write to Template (Fast Append)
         # Create 14 row gap as requested
