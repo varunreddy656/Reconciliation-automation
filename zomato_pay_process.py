@@ -20,8 +20,18 @@ def ordinal(n):
 def get_week_ranges(first_start, first_end, last_start, last_end):
     """Calculates week ranges dynamically based on the first and last week input."""
     try:
-        f_s, f_e = int(float(first_start)), int(float(first_end))
-        l_s, l_e = int(float(last_start)), int(float(last_end))
+        def extract_day(val):
+            if val is None: return 1
+            if isinstance(val, (int, float)): return int(val)
+            nums = re.findall(r'\d+', str(val))
+            if nums:
+                return int(nums[-1])
+            return 1
+
+        f_s = extract_day(first_start)
+        f_e = extract_day(first_end)
+        l_s = extract_day(last_start)
+        l_e = extract_day(last_end)
         
         weeks = [(f_s, f_e)]
         curr_start = f_e + 1
@@ -38,7 +48,7 @@ def get_week_ranges(first_start, first_end, last_start, last_end):
         for ws, we in weeks:
             flat_list.extend([ws, we])
         return weeks, flat_list
-    except:
+    except Exception:
         return [], []
 
 def safe_float(v):

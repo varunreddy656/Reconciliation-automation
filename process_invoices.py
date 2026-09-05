@@ -77,11 +77,19 @@ def calculate_week_structure(month, first_week_start, first_week_end, last_week_
     else:
        year = current_year
        
-    # Parse day numbers
-    first_start_day = int(str(first_week_start).strip())
-    first_end_day = int(str(first_week_end).strip())
-    last_start_day = int(str(last_week_start).strip())
-    last_end_day = int(str(last_week_end).strip())
+    # Parse day numbers safely
+    def _to_day_int(val):
+        if val is None: return 1
+        if isinstance(val, (int, float)): return int(val)
+        nums = re.findall(r'\d+', str(val))
+        if nums:
+            return int(nums[-1])
+        return 1
+
+    first_start_day = _to_day_int(first_week_start)
+    first_end_day = _to_day_int(first_week_end)
+    last_start_day = _to_day_int(last_week_start)
+    last_end_day = _to_day_int(last_week_end)
 
     # Determine actual months for each date
     if first_start_day > first_end_day:
