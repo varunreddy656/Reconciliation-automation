@@ -12,8 +12,10 @@ threads = 4
 max_requests = 50
 max_requests_jitter = 5
 
-# Bound address
-bind = "0.0.0.0:10000"
+import os
+
+# Bound address using Render PORT env variable
+bind = f"0.0.0.0:{os.environ.get('PORT', '10000')}"
 
 # Preload app for memory efficiency
 preload_app = True
