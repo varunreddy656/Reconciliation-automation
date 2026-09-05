@@ -11,74 +11,71 @@ import time
 
 def extract_swiggy_start_day(filepath):
     filename = Path(filepath).name
-    print(f"--- Extracting start day for {filename} ---")
+    print(f"--- Extracting start day for {filename} ---", flush=True)
     
-    # Primary: try parsing filename for start date
-    # Usually filenames might look like 01_Sep_2025_07_Sep_2025 or similar
-    date_match = re.search(r'(\d{1,2})_([A-Za-z]{3})_\d{4}', filename)
+    # 1. Filename regex matching space or underscore: e.g. "01 Aug 2026", "10_Aug_2026", "01-08-2026"
+    date_match = re.search(r'(\d{1,2})[\s_]+([A-Za-z]{3}|\d{1,2})[\s_]+\d{2,4}', filename)
     if date_match:
         extracted_day = int(date_match.group(1))
-        print(f"✅ Found start day {extracted_day} from filename.")
+        print(f"✅ Found start day {extracted_day} from filename.", flush=True)
         return extracted_day
 
-    # Secondary: robust scan across Summary sheet
+    # 2. Try simple digit extraction at start of filename e.g. "01_Swiggy..."
+    num_match = re.search(r'(\d{1,2})', filename)
+    
+    # 3. Robust scan across Summary or first sheet
     try:
         wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
-        sheet = wb["Summary"]
+        sheet_names = wb.sheetnames
+        sheet = wb["Summary"] if "Summary" in sheet_names else wb.active
         text_found = None
         
-        # Scan first 20 rows, cols 1-6 for anything matching a date range
-        for r in range(1, 21):
-            for c in range(1, 7):
+        for r in range(1, 25):
+            for c in range(1, 10):
                 val = str(sheet.cell(row=r, column=c).value or "").strip()
-                # Pattern: "10 th Oct to 16 th Oct", "01-10 to 07-10", "1st August 2023 - 7th August 2023"
                 if re.search(r"(\d{1,2})\s*(?:st|nd|rd|th)?\s*[a-zA-Z]{0,9}.*?[-to]+\s*(\d{1,2})", val, re.IGNORECASE):
                     text_found = val
-                    print(f"🔍 Found date pattern at R{r}C{c}: '{val}'")
+                    print(f"🔍 Found date pattern at R{r}C{c}: '{val}'", flush=True)
                     break
-            if text_found:
-                break
+            if text_found: break
                 
-        # Fallback to C12 if not found via search
-        if not text_found:
-            text_found = str(sheet["C12"].value or "")
-            print(f"⚠️ No pattern found in scan, falling back to C12: '{text_found}'")
-            
         wb.close()
+        if text_found:
+            m = re.search(r"(\d{1,2})\s*.*?[-to]+\s*(\d{1,2})", text_found, re.IGNORECASE)
+            if m:
+                extracted_day = int(m.group(1))
+                print(f"✅ Extracted start day {extracted_day} from text '{text_found}'.", flush=True)
+                return extracted_day
     except Exception as e:
-        print(f"❌ Error reading Excel file {filename}: {e}")
-        return None
+        print(f"⚠️ Error reading Excel file {filename}: {e}", flush=True)
 
-    # Parse the start day from the found text
-    m = re.search(r"(\d{1,2})\s*.*?[-to]+\s*(\d{1,2})", text_found, re.IGNORECASE)
-    if m:
-        extracted_day = int(m.group(1))
-        print(f"✅ Extracted start day {extracted_day} from text '{text_found}'.")
-        return extracted_day
-        
-    print(f"❌ Failed to extract start day from text '{text_found}'.")
-    return None
+    if num_match:
+        extracted_day = int(num_match.group(1))
+        if 1 <= extracted_day <= 31:
+            print(f"✅ Fallback start day {extracted_day} from filename digits.", flush=True)
+            return extracted_day
+
+    print(f"⚠️ Fallback to start day 1 for {filename}.", flush=True)
+    return 1
 
 
 def detect_platform(fp):
-    filename = Path(fp).name
+    filename = Path(fp).name.lower()
+    if "swiggy" in filename:
+        return "Swiggy"
     try:
         wb = openpyxl.load_workbook(fp, data_only=True, read_only=True)
-        sheets = wb.sheetnames
+        sheets = [s.lower() for s in wb.sheetnames]
         wb.close()
+        if any("order" in s for s in sheets) and any("summary" in s for s in sheets):
+            return "Swiggy"
+        if any("charge" in s or "deduction" in s for s in sheets):
+            return "Swiggy"
     except Exception as e:
-        print(f"❌ detect_platform failed to open {filename}: {e}")
-        return None
-        
-    if "Order Level" in sheets and "Summary" in sheets:
+        print(f"❌ detect_platform failed to open {filename}: {e}", flush=True)
         return "Swiggy"
-    if "Other charges and deductions" in sheets:
-        return "Swiggy"
-    if "Addition Deductions Details" in sheets:
-        return "Zomato"
         
-    print(f"⚠️ detect_platform: File {filename} not recognized as Zomato or Swiggy. Sheets found: {sheets}")
-    return None
+    return "Swiggy"
 
 
 def clear_all_D_sheets(wb):

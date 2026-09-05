@@ -426,6 +426,9 @@ def ensure_sheet(wb, name):
     """Get or create sheet"""
     if name in wb.sheetnames:
         return wb[name]
+    else:
+        return wb.create_sheet(name)
+
 def fast_clear_sheet(ws):
     """Fast sheet clear without openpyxl delete_rows performance lock"""
     if ws and ws.max_row > 0:
