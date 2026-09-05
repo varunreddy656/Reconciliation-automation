@@ -139,9 +139,15 @@ def generate_week_ranges(first_start, first_end, last_start, last_end, max_day=3
     return week_ranges
 
 
+def fast_clear_sheet(ws):
+    if ws and ws.max_row > 0:
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+            for cell in row:
+                cell.value = None
+
 def copy_data(src, tgt, start_row):
     max_row, max_col = src.max_row, src.max_column
-    tgt.delete_rows(1, tgt.max_row)
+    fast_clear_sheet(tgt)
     for r in range(start_row, max_row + 1):
         for c in range(1, max_col + 1):
             tgt.cell(row=r - start_row + 1, column=c).value = src.cell(row=r, column=c).value

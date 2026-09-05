@@ -426,8 +426,12 @@ def ensure_sheet(wb, name):
     """Get or create sheet"""
     if name in wb.sheetnames:
         return wb[name]
-    else:
-        return wb.create_sheet(name)
+def fast_clear_sheet(ws):
+    """Fast sheet clear without openpyxl delete_rows performance lock"""
+    if ws and ws.max_row > 0:
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row):
+            for cell in row:
+                cell.value = None
 
 
 def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week_info=None, cashflow_sheet=None):
@@ -446,7 +450,7 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     if not order_date_col or not target_month:
         print(f"  ⚠️  Order Date or Target Month missing - copying all data")
         max_row, max_col = src.max_row, src.max_column
-        tgt.delete_rows(1, tgt.max_row)
+        fast_clear_sheet(tgt)
         for r in range(start_row, max_row + 1):
             for c in range(1, max_col + 1):
                 tgt.cell(row=r - start_row + 1, column=c).value = src.cell(row=r, column=c).value
@@ -462,7 +466,7 @@ def copy_data_with_spillover_filter(src, tgt, start_row, target_month=None, week
     opening_spillover_sum = 0
     closing_spillover_sum = 0
 
-    tgt.delete_rows(1, tgt.max_row)
+    fast_clear_sheet(tgt)
     for c in range(1, src.max_column + 1):
         tgt.cell(row=1, column=c).value = src.cell(row=start_row, column=c).value
 
@@ -1517,7 +1521,7 @@ def process_zomato_recon(
 
                     # Clear target sheet
                     if d2.max_row > 1:
-                        d2.delete_rows(1, d2.max_row)
+                        fast_clear_sheet(d2)
                         print(f"  🗑️  Cleared existing D2W{week_num} data")
 
                     # Copy ALL data from D2W source
@@ -1590,7 +1594,7 @@ def process_zomato_recon(
                 # Copy bank sheet to recon
                 if "BANK" in recon.sheetnames:
                     recon_bank = recon["BANK"]
-                    recon_bank.delete_rows(1, recon_bank.max_row)
+                    fast_clear_sheet(recon_bank)
                 else:
                     recon_bank = recon.create_sheet("BANK")
                 
