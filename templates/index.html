@@ -1025,18 +1025,44 @@
 
     let activeTaskId = null;
 
-    async function pollProgress(taskId) {
+    async function pollProgress(taskId, resultId, downloadLinkId) {
       if (!taskId || taskId !== activeTaskId) return;
       try {
         const response = await fetch(`/progress/${taskId}`);
         const data = await response.json();
-        if (data.progress !== undefined && taskId === activeTaskId) {
-          updateProgressUI(data.progress);
-          if (data.progress < 100) {
-            setTimeout(() => pollProgress(taskId), 800);
+        if (taskId !== activeTaskId) return;
+
+        if (data.status === 'completed' || (data.success === true && data.download_url)) {
+          activeTaskId = null;
+          updateProgressUI(100);
+          document.getElementById('loadingOverlay').style.display = 'none';
+          showToast(data.message || 'Processing complete!', 'success');
+          if (resultId && downloadLinkId) {
+            const resDiv = document.getElementById(resultId);
+            const dlLink = document.getElementById(downloadLinkId);
+            resDiv.style.display = 'block';
+            dlLink.href = data.download_url;
+            resDiv.scrollIntoView({ behavior: 'smooth' });
           }
+          return;
         }
-      } catch (e) { }
+
+        if (data.status === 'failed' || data.success === false) {
+          activeTaskId = null;
+          document.getElementById('loadingOverlay').style.display = 'none';
+          showToast(data.message || 'Processing failed', 'error');
+          return;
+        }
+
+        if (data.progress !== undefined) {
+          updateProgressUI(data.progress);
+        }
+        setTimeout(() => pollProgress(taskId, resultId, downloadLinkId), 800);
+      } catch (e) {
+        if (taskId === activeTaskId) {
+          setTimeout(() => pollProgress(taskId, resultId, downloadLinkId), 1000);
+        }
+      }
     }
 
     // --- FORM HANDLING ---
@@ -1045,17 +1071,13 @@
       const form = e.target;
       const overlay = document.getElementById('loadingOverlay');
 
-      // Reset progress UI
       updateProgressUI(0);
-
-      // Generate a task ID & set active
       const taskId = 'task_' + Date.now();
       activeTaskId = taskId;
       const formData = new FormData(form);
       formData.append('task_id', taskId);
 
       overlay.style.display = 'flex';
-      pollProgress(taskId);
 
       try {
         const response = await fetch(apiEndpoint, { method: 'POST', body: formData });
@@ -1066,19 +1088,15 @@
           throw new Error("Server returned non-JSON response.");
         }
 
-        activeTaskId = null;
-        overlay.style.display = 'none';
-
-        if (response.ok && result.success) {
-          showToast(result.message || 'Processing complete!', 'success');
-          const resDiv = document.getElementById(resultId);
-          const dlLink = document.getElementById(downloadLinkId);
-          resDiv.style.display = 'block';
-          dlLink.href = `/download/${result.filename || result.download_url.split('/').pop()}`;
-          resDiv.scrollIntoView({ behavior: 'smooth' });
-        } else {
-          showToast(result.message || 'Processing failed', 'error');
+        if (!response.ok || !result.success) {
+          activeTaskId = null;
+          overlay.style.display = 'none';
+          showToast(result.message || 'Submission failed', 'error');
+          return;
         }
+
+        // Start polling until background task is completed
+        pollProgress(taskId, resultId, downloadLinkId);
       } catch (err) {
         activeTaskId = null;
         overlay.style.display = 'none';

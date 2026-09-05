@@ -146,6 +146,27 @@ def cleanup_folder_delayed(folder_path, delay=3):
     thread.start()
 
 
+import re, sys, traceback
+
+def parse_day_input(val, default=1):
+    if not val: return default
+    if isinstance(val, (int, float)): return int(val)
+    nums = re.findall(r'\d+', str(val))
+    if nums:
+        return int(nums[-1])
+    return default
+
+def set_task_result(task_id, result_data):
+    """Write JSON task result file for completion/failure tracking"""
+    if task_id:
+        try:
+            result_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.result")
+            with open(result_file, 'w') as f:
+                json.dump(result_data, f)
+            print(f"Task {task_id} result saved: success={result_data.get('success')}", flush=True)
+        except Exception as e:
+            print(f"⚠️ Error writing result file: {e}", flush=True)
+
 # Task Progress Tracking
 def update_progress(task_id, progress):
     """Update progress for a specific task using a temporary file"""
@@ -160,18 +181,26 @@ def update_progress(task_id, progress):
 
 @app.route('/progress/<task_id>')
 def get_progress(task_id):
-    """Get current progress for a task from its progress file"""
+    """Get current progress and result for a task"""
     try:
+        # 1. Check for finished result
+        result_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.result")
+        if os.path.exists(result_file):
+            with open(result_file, 'r') as f:
+                data = json.load(f)
+                return jsonify(data)
+
+        # 2. Check for intermediate progress
         progress_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{task_id}.progress")
         if os.path.exists(progress_file):
             with open(progress_file, 'r') as f:
                 progress = f.read().strip()
                 if progress:
-                    return jsonify({'progress': int(progress)})
+                    return jsonify({'progress': int(progress), 'status': 'processing'})
     except Exception as e:
-        print(f"⚠️ Error reading progress file: {e}")
+        print(f"⚠️ Error reading progress file: {e}", flush=True)
     
-    return jsonify({'progress': 0})
+    return jsonify({'progress': 0, 'status': 'processing'})
 
 @app.route('/')
 def index():
@@ -183,7 +212,7 @@ def index():
 
 @app.route('/upload/swiggy-dineout', methods=['POST'])
 def upload_swiggy_dineout():
-    """Handle Swiggy Dineout file upload"""
+    """Handle Swiggy Dineout file upload asynchronously"""
     try:
         if 'invoices' not in request.files:
             return jsonify({'success': False, 'message': 'No invoice files uploaded'})
@@ -196,41 +225,66 @@ def upload_swiggy_dineout():
         if not invoice_files or invoice_files[0].filename == '':
             return jsonify({'success': False, 'message': 'No invoice files selected'})
             
-        # Optional: Save template if user provided one? 
-        # For now assume static template path key
-        
-        # Define progress callback
-        p_func = lambda p: update_progress(task_id, p)
+        session_id = str(uuid.uuid4())[:8]
+        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], f"dineout_{session_id}")
+        os.makedirs(session_folder, exist_ok=True)
+
+        saved_files = []
+        for f in invoice_files:
+            if f and allowed_file(f.filename):
+                fn = secure_filename(f.filename)
+                fp = os.path.join(session_folder, fn)
+                f.save(fp)
+                saved_files.append(fp)
         
         output_filename = get_formatted_filename(client_name, "Swiggy Dineout", month)
-        
-        output_file, error = swiggy_dineout_process.process_swiggy_dineout(
-            invoice_files,
-            app.config['SWIGGY_DINEOUT_TEMPLATE'],
-            app.config['OUTPUT_FOLDER'],
-            p_func,
-            client_name=client_name,
-            month=month,
-            forced_filename=output_filename # Pass filename
-        )
-        
-        if error:
-            return jsonify({'success': False, 'message': f"Error: {error}"})
-            
-        download_url = f"/download/{output_file}"
-        return jsonify({
-            'success': True, 
-            'message': 'Swiggy Dineout Reconciliation Completed!',
-            'download_url': download_url
-        })
+        update_progress(task_id, 5)
 
+        def run_bg():
+            try:
+                class FileMock:
+                    def __init__(self, path):
+                        self.filename = os.path.basename(path)
+                        self.path = path
+                    def save(self, dst):
+                        shutil.copy2(self.path, dst)
+                mock_files = [FileMock(p) for p in saved_files]
+                p_func = lambda p: update_progress(task_id, p)
+                output_file, error = swiggy_dineout_process.process_swiggy_dineout(
+                    mock_files,
+                    app.config['SWIGGY_DINEOUT_TEMPLATE'],
+                    app.config['OUTPUT_FOLDER'],
+                    p_func,
+                    client_name=client_name,
+                    month=month,
+                    forced_filename=output_filename
+                )
+                if error:
+                    set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {error}"})
+                else:
+                    set_task_result(task_id, {
+                        'progress': 100, 'status': 'completed', 'success': True,
+                        'message': 'Swiggy Dineout Reconciliation Completed!',
+                        'filename': output_file, 'download_url': f"/download/{output_file}"
+                    })
+            except Exception as e:
+                err_msg = traceback.format_exc()
+                print(f"❌ Swiggy Dineout Async Error:\n{err_msg}", flush=True)
+                set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {str(e)}"})
+            finally:
+                gc.collect()
+                if session_folder and os.path.exists(session_folder):
+                    cleanup_folder_delayed(session_folder, delay=2)
+
+        threading.Thread(target=run_bg, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Processing started', 'task_id': task_id, 'status': 'processing'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/upload/zomato-pay', methods=['POST'])
 def upload_zomato_pay():
-    """Handle Zomato Pay file upload"""
+    """Handle Zomato Pay file upload asynchronously"""
     try:
         if 'invoices' not in request.files:
             return jsonify({'success': False, 'message': 'No invoice files uploaded'})
@@ -240,7 +294,6 @@ def upload_zomato_pay():
         client_name = request.form.get('clientName', '')
         month = request.form.get('month', '')
 
-        # Week ranges
         f_start = request.form.get('firstWeekStart')
         f_end = request.form.get('firstWeekEnd')
         l_start = request.form.get('lastWeekStart')
@@ -248,88 +301,100 @@ def upload_zomato_pay():
         
         if not invoice_files or invoice_files[0].filename == '':
             return jsonify({'success': False, 'message': 'No invoice files selected'})
-            
-        # Define progress callback
-        p_func = lambda p: update_progress(task_id, p)
+
+        session_id = str(uuid.uuid4())[:8]
+        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], f"zpay_{session_id}")
+        os.makedirs(session_folder, exist_ok=True)
+
+        saved_files = []
+        for f in invoice_files:
+            if f and allowed_file(f.filename):
+                fn = secure_filename(f.filename)
+                fp = os.path.join(session_folder, fn)
+                f.save(fp)
+                saved_files.append(fp)
         
         output_filename = get_formatted_filename(client_name, "Zomato Pay", month)
+        update_progress(task_id, 5)
 
-        output_file, error = zomato_pay_process.process_zomato_pay(
-            invoice_files,
-            app.config['ZOMATO_PAY_TEMPLATE'],
-            app.config['OUTPUT_FOLDER'],
-            p_func,
-            client_name=client_name,
-            month=month,
-            first_start=f_start,
-            first_end=f_end,
-            last_start=l_start,
-            last_end=l_end,
-            forced_filename=output_filename # Pass filename
-        )
-        
-        if error:
-            return jsonify({'success': False, 'message': f"Error: {error}"})
-            
-        download_url = f"/download/{output_file}"
-        return jsonify({
-            'success': True, 
-            'message': 'Zomato Pay Reconciliation Completed!',
-            'download_url': download_url
-        })
+        def run_bg():
+            try:
+                class FileMock:
+                    def __init__(self, path):
+                        self.filename = os.path.basename(path)
+                        self.path = path
+                    def save(self, dst):
+                        shutil.copy2(self.path, dst)
+                mock_files = [FileMock(p) for p in saved_files]
+                p_func = lambda p: update_progress(task_id, p)
+                output_file, error = zomato_pay_process.process_zomato_pay(
+                    mock_files,
+                    app.config['ZOMATO_PAY_TEMPLATE'],
+                    app.config['OUTPUT_FOLDER'],
+                    p_func,
+                    client_name=client_name,
+                    month=month,
+                    first_start=f_start,
+                    first_end=f_end,
+                    last_start=l_start,
+                    last_end=l_end,
+                    forced_filename=output_filename
+                )
+                if error:
+                    set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {error}"})
+                else:
+                    set_task_result(task_id, {
+                        'progress': 100, 'status': 'completed', 'success': True,
+                        'message': 'Zomato Pay Reconciliation Completed!',
+                        'filename': output_file, 'download_url': f"/download/{output_file}"
+                    })
+            except Exception as e:
+                err_msg = traceback.format_exc()
+                print(f"❌ Zomato Pay Async Error:\n{err_msg}", flush=True)
+                set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {str(e)}"})
+            finally:
+                gc.collect()
+                if session_folder and os.path.exists(session_folder):
+                    cleanup_folder_delayed(session_folder, delay=2)
 
+        threading.Thread(target=run_bg, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Processing started', 'task_id': task_id, 'status': 'processing'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
-    """Handle file upload and processing"""
+    """Handle Zomato file upload and processing asynchronously"""
     session_folder = None
-
     try:
-        # Check if template file exists
         if not os.path.exists(app.config['TEMPLATE_FILE']):
-            return jsonify({
-                'success': False,
-                'message': 'Template file not found! Please contact administrator.'
-            })
+            return jsonify({'success': False, 'message': 'Template file not found! Please contact administrator.'})
 
-        # Validate invoice files
         if 'invoices' not in request.files:
             return jsonify({'success': False, 'message': 'No invoice files uploaded'})
 
         invoice_files = request.files.getlist('invoices')
-
         if not invoice_files or invoice_files[0].filename == '':
             return jsonify({'success': False, 'message': 'No invoice files selected'})
 
-        # Get form data
         month = request.form.get('month', 'October')
         client_name = request.form.get('client_name', '').strip() or None
         recon_mode = request.form.get('recon_mode', 'weekly')
 
-        # ✅ GET WEEK DATE RANGES (Only for weekly)
         first_week_start = request.form.get('first_week_start')
         first_week_end = request.form.get('first_week_end')
         last_week_start = request.form.get('last_week_start')
         last_week_end = request.form.get('last_week_end')
 
-        # Create unique session folder
         session_id = str(uuid.uuid4())[:8]
         session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
         os.makedirs(session_folder, exist_ok=True)
 
-        # ✅ VALIDATE WEEK DATES (If weekly)
         if recon_mode == 'weekly' and not all([first_week_start, first_week_end, last_week_start, last_week_end]):
-            if os.path.exists(session_folder):
-                shutil.rmtree(session_folder)
-            return jsonify({
-                'success': False,
-                'message': 'All week date fields are required (First Week Start, First Week End, Last Week Start, Last Week End)'
-            })
+            if os.path.exists(session_folder): shutil.rmtree(session_folder)
+            return jsonify({'success': False, 'message': 'All week date fields are required'})
 
-        # Save invoice files
         invoice_folder = os.path.join(session_folder, 'invoices')
         os.makedirs(invoice_folder, exist_ok=True)
 
@@ -342,11 +407,9 @@ def upload_files():
                 saved_invoices.append(filepath)
 
         if not saved_invoices:
-            if session_folder and os.path.exists(session_folder):
-                shutil.rmtree(session_folder)
+            if session_folder and os.path.exists(session_folder): shutil.rmtree(session_folder)
             return jsonify({'success': False, 'message': 'No valid invoice files uploaded'})
 
-        # ✅ GET OPTIONAL BANK FILE
         bank_file = request.files.get('bankFile')
         bank_file_path = None
         if bank_file and bank_file.filename != '':
@@ -355,120 +418,64 @@ def upload_files():
                 bank_file_path = os.path.join(session_folder, f"bank_{bank_filename}")
                 bank_file.save(bank_file_path)
             else:
-                if os.path.exists(session_folder):
-                    shutil.rmtree(session_folder)
+                if os.path.exists(session_folder): shutil.rmtree(session_folder)
                 return jsonify({'success': False, 'message': 'Invalid bank file format'})
 
-        # Generate output path
         output_filename = get_formatted_filename(client_name, "Zomato", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-
-        # Get Task ID for progress tracking
         task_id = request.form.get('task_id')
-        if task_id:
-            update_progress(task_id, 5) # Initial progress
-          # Run processing in background if many files, or synchronous if simple
-        try:
-            p_func = lambda p: update_progress(task_id, p)
-            
-            if recon_mode == 'consolidated':
-                result = process_zomato_consolidated(
-                    invoice_folder,
-                    app.config['TEMPLATE_FILE'],
-                    output_path,
-                    client_name=client_name,
-                    month=month,
-                    first_week_start=first_week_start,
-                    first_week_end=first_week_end,
-                    last_week_start=last_week_start,
-                    last_week_end=last_week_end,
-                    bank_file_path=bank_file_path,
-                    progress_callback=p_func
-                )
-            else: # Default to weekly or other modes handled by process_zomato_recon
-                result = process_zomato_recon(
-                    invoice_folder,
-                    app.config['TEMPLATE_FILE'],
-                    output_path,
-                    client_name=client_name,
-                    month=month,
-                    first_week_start=first_week_start,
-                    first_week_end=first_week_end,
-                    last_week_start=last_week_start,
-                    last_week_end=last_week_end,
-                    bank_file_path=bank_file_path,
-                    progress_callback=p_func
-                )
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"❌ Processing Error:\n{error_details}")
-            return jsonify({
-                'success': False,
-                'message': f"Processing Error: {str(e)}",
-                'traceback': error_details
-            }), 500
+        update_progress(task_id, 5)
 
+        def run_bg():
+            try:
+                p_func = lambda p: update_progress(task_id, p)
+                if recon_mode == 'consolidated':
+                    result = process_zomato_consolidated(
+                        invoice_folder, app.config['TEMPLATE_FILE'], output_path,
+                        client_name=client_name, month=month,
+                        first_week_start=first_week_start, first_week_end=first_week_end,
+                        last_week_start=last_week_start, last_week_end=last_week_end,
+                        bank_file_path=bank_file_path, progress_callback=p_func
+                    )
+                else:
+                    result = process_zomato_recon(
+                        invoice_folder, app.config['TEMPLATE_FILE'], output_path,
+                        client_name=client_name, month=month,
+                        first_week_start=first_week_start, first_week_end=first_week_end,
+                        last_week_start=last_week_start, last_week_end=last_week_end,
+                        bank_file_path=bank_file_path, progress_callback=p_func
+                    )
+                
+                if isinstance(result, dict) and not result.get('success', True):
+                    set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': result.get('message', 'Processing failed')})
+                else:
+                    set_task_result(task_id, {
+                        'progress': 100, 'status': 'completed', 'success': True,
+                        'message': 'Zomato Reconciliation Completed!',
+                        'filename': output_filename, 'download_url': f"/download/{output_filename}"
+                    })
+            except Exception as e:
+                err_msg = traceback.format_exc()
+                print(f"❌ Zomato Async Error:\n{err_msg}", flush=True)
+                set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {str(e)}"})
+            finally:
+                gc.collect()
+                if session_folder and os.path.exists(session_folder):
+                    cleanup_folder_delayed(session_folder, delay=2)
 
-        # ✅ Force garbage collection to release file handles
-        gc.collect()
-        time.sleep(0.5)  # Small delay to ensure handles are released
-
-        # ✅ Cleanup session folder in BACKGROUND (delayed)
-        if session_folder and os.path.exists(session_folder):
-            cleanup_folder_delayed(session_folder, delay=2)
-
-        if result.get('success'):
-            return jsonify({
-                'success': True,
-                'message': f"Successfully processed {result['weeks_processed']} weeks",
-                'download_url': f"/download/{output_filename}",
-                'weeks_processed': result['weeks_processed']
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': result.get('message', 'Processing failed'),
-                'traceback': result.get('traceback', '')
-            })
-
+        threading.Thread(target=run_bg, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Processing started', 'task_id': task_id, 'status': 'processing'})
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Submission Error:\n{error_details}")
-
-        # Cleanup on error
-        try:
-            if 'session_folder' in locals() and session_folder and os.path.exists(session_folder):
-                time.sleep(1)
-                shutil.rmtree(session_folder)
-        except:
-            pass
-
-        return jsonify({
-            'success': False,
-            'message': f"Submission Error: {str(e)}",
-            'traceback': error_details
-        }), 500
-
-        return jsonify({
-            'success': False,
-            'message': f'Error: {str(e)}'
-        })
+        return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/upload/swiggy', methods=['POST'])
 def upload_swiggy_files():
-    print("Swiggy Upload endpoint hit")
+    """Handle Swiggy file upload asynchronously"""
     session_folder = None
-
     try:
-        # Check if template file exists
         if not os.path.exists(app.config['SWIGGY_TEMPLATE_FILE']):
-            return jsonify({
-                'success': False,
-                'message': 'Swiggy Template file not found! Please contact administrator.'
-            })
+            return jsonify({'success': False, 'message': 'Swiggy Template file not found! Please contact administrator.'})
 
         if 'invoices' not in request.files:
             return jsonify({'success': False, 'message': 'No invoice files uploaded'})
@@ -478,24 +485,19 @@ def upload_swiggy_files():
             return jsonify({'success': False, 'message': 'No invoice files selected'})
 
         bank_file = request.files.get('bankFile')
-
         client_name = request.form.get('clientName', '').strip()
         month = request.form.get('month', '').strip()
 
-        try:
-            first_week_start = int(request.form.get('firstWeekStart'))
-            first_week_end = int(request.form.get('firstWeekEnd'))
-            last_week_start = int(request.form.get('lastWeekStart'))
-            last_week_end = int(request.form.get('lastWeekEnd'))
-        except (ValueError, TypeError):
-            return jsonify({'success': False, 'message': 'Invalid week range input'}), 400
+        # Parse week ranges safely (handles full date strings or integers)
+        first_week_start = parse_day_input(request.form.get('firstWeekStart'), 1)
+        first_week_end = parse_day_input(request.form.get('firstWeekEnd'), 7)
+        last_week_start = parse_day_input(request.form.get('lastWeekStart'), 25)
+        last_week_end = parse_day_input(request.form.get('lastWeekEnd'), 31)
 
-        # Create unique session folder
         session_id = str(uuid.uuid4())[:8]
         session_folder = os.path.join(app.config['UPLOAD_FOLDER'], f"swiggy_{session_id}")
         os.makedirs(session_folder, exist_ok=True)
 
-        # Save invoices
         saved_count = 0
         for f in invoice_files:
             if f and allowed_file(f.filename):
@@ -507,15 +509,10 @@ def upload_swiggy_files():
             shutil.rmtree(session_folder)
             return jsonify({'success': False, 'message': 'No valid invoice files uploaded'})
 
-        # Save optional bank file
         bank_file_path = None
         if bank_file and bank_file.filename != '':
             if allowed_file(bank_file.filename):
                 bank_filename = secure_filename(bank_file.filename)
-                # Save just outside session folder or inside? Inside is cleaner for cleanup.
-                # But process_invoices_web might expect it elsewhere? 
-                # The original code saved it in UPLOAD_FOLDER with a unique name.
-                # Let's save it in session_folder for easier cleanup.
                 bank_file_path = os.path.join(session_folder, f"bank_{bank_filename}")
                 bank_file.save(bank_file_path)
             else:
@@ -524,58 +521,51 @@ def upload_swiggy_files():
 
         output_filename = get_formatted_filename(client_name, "Swiggy", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-
-        # Get Task ID for progress tracking
         task_id = request.form.get('task_id')
-        if task_id:
-            update_progress(task_id, 5) # Initial progress
+        update_progress(task_id, 5)
 
-        result = process_invoices_web(
-            invoice_folder_path=session_folder,
-            template_recon_path=app.config['SWIGGY_TEMPLATE_FILE'],
-            output_path=output_path,
-            client_name=client_name,
-            month=month,
-            first_week_start=first_week_start,
-            first_week_end=first_week_end,
-            last_week_start=last_week_start,
-            last_week_end=last_week_end,
-            bank_file_path=bank_file_path,
-            progress_callback=lambda p: update_progress(task_id, p)
-        )
+        def run_bg():
+            try:
+                p_func = lambda p: update_progress(task_id, p)
+                result = process_invoices_web(
+                    invoice_folder_path=session_folder,
+                    template_recon_path=app.config['SWIGGY_TEMPLATE_FILE'],
+                    output_path=output_path,
+                    client_name=client_name,
+                    month=month,
+                    first_week_start=first_week_start,
+                    first_week_end=first_week_end,
+                    last_week_start=last_week_start,
+                    last_week_end=last_week_end,
+                    bank_file_path=bank_file_path,
+                    progress_callback=p_func
+                )
+                if result.get('success'):
+                    set_task_result(task_id, {
+                        'progress': 100, 'status': 'completed', 'success': True,
+                        'message': result.get('message', 'Swiggy Reconciliation Complete'),
+                        'filename': output_filename, 'download_url': f"/download/{output_filename}"
+                    })
+                else:
+                    set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': result.get('message', 'Processing failed')})
+            except Exception as e:
+                err_msg = traceback.format_exc()
+                print(f"❌ Swiggy Async Error:\n{err_msg}", flush=True)
+                set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {str(e)}"})
+            finally:
+                gc.collect()
+                if session_folder and os.path.exists(session_folder):
+                    cleanup_folder_delayed(session_folder, delay=2)
 
-        # Cleanup
-        gc.collect()
-        if session_folder and os.path.exists(session_folder):
-            cleanup_folder_delayed(session_folder, delay=2)
-
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'message': result.get('message', 'Processed successfully'),
-                'download_url': f"/download/{output_filename}"
-            })
-        else:
-             return jsonify({
-                'success': False,
-                'message': result.get('message', 'Processing failed')
-            })
-
+        threading.Thread(target=run_bg, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Processing started', 'task_id': task_id, 'status': 'processing'})
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Swiggy Error:\n{error_details}")
-        return jsonify({
-            'success': False,
-            'message': f"Submission Error: {str(e)}",
-            'traceback': error_details
-        }), 500
-
+        return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/upload/paytm', methods=['POST'])
 def upload_paytm():
-    """Handle Paytm file upload and processing"""
+    """Handle Paytm file upload asynchronously"""
     session_folder = None
     try:
         if not os.path.exists(app.config['PAYTM_TEMPLATE']):
@@ -591,17 +581,15 @@ def upload_paytm():
         client_name = request.form.get('clientName', 'Client').strip()
         month = request.form.get('month', 'October')
 
-        # Get week ranges
         first_week_start = request.form.get('firstWeekStart')
         first_week_end = request.form.get('firstWeekEnd')
         last_week_start = request.form.get('lastWeekStart')
         last_week_end = request.form.get('lastWeekEnd')
 
         session_id = str(uuid.uuid4())[:8]
-        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], session_id)
+        session_folder = os.path.join(app.config['UPLOAD_FOLDER'], f"paytm_{session_id}")
         os.makedirs(session_folder, exist_ok=True)
 
-        # Save the first file (Paytm is expected as single file)
         file = invoice_files[0]
         filename = secure_filename(file.filename)
         filepath = os.path.join(session_folder, filename)
@@ -609,45 +597,45 @@ def upload_paytm():
 
         output_filename = get_formatted_filename(client_name, "Paytm", month)
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-
         task_id = request.form.get('task_id')
-        p_func = lambda p: update_progress(task_id, p)
-        if task_id: update_progress(task_id, 10)
+        update_progress(task_id, 5)
 
-        result = paytm_process.process_paytm(
-            filepath,
-            app.config['PAYTM_TEMPLATE'],
-            output_path,
-            client_name=client_name,
-            month=month,
-            first_week_start=first_week_start,
-            first_week_end=first_week_end,
-            last_week_start=last_week_start,
-            last_week_end=last_week_end,
-            progress_callback=p_func
-        )
+        def run_bg():
+            try:
+                p_func = lambda p: update_progress(task_id, p)
+                result = paytm_process.process_paytm(
+                    filepath,
+                    app.config['PAYTM_TEMPLATE'],
+                    output_path,
+                    client_name=client_name,
+                    month=month,
+                    first_week_start=first_week_start,
+                    first_week_end=first_week_end,
+                    last_week_start=last_week_start,
+                    last_week_end=last_week_end,
+                    progress_callback=p_func
+                )
+                if result.get('success'):
+                    set_task_result(task_id, {
+                        'progress': 100, 'status': 'completed', 'success': True,
+                        'message': 'Paytm Reconciliation Complete',
+                        'filename': output_filename, 'download_url': f"/download/{output_filename}"
+                    })
+                else:
+                    set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': result.get('message', 'Processing failed')})
+            except Exception as e:
+                err_msg = traceback.format_exc()
+                print(f"❌ Paytm Async Error:\n{err_msg}", flush=True)
+                set_task_result(task_id, {'progress': 0, 'status': 'failed', 'success': False, 'message': f"Error: {str(e)}"})
+            finally:
+                gc.collect()
+                if session_folder and os.path.exists(session_folder):
+                    cleanup_folder_delayed(session_folder, delay=2)
 
-        if session_folder and os.path.exists(session_folder):
-            cleanup_folder_delayed(session_folder, delay=2)
-
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'message': 'Paytm Reconciliation Complete',
-                'download_url': f"/download/{output_filename}"
-            })
-        else:
-            return jsonify({'success': False, 'message': result.get('message', 'Processing failed')})
-
+        threading.Thread(target=run_bg, daemon=True).start()
+        return jsonify({'success': True, 'message': 'Processing started', 'task_id': task_id, 'status': 'processing'})
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ Paytm Error:\n{error_details}")
-        return jsonify({
-            'success': False,
-            'message': f"Submission Error: {str(e)}",
-            'traceback': error_details
-        }), 500
+        return jsonify({'success': False, 'message': str(e)})
 
 
 @app.route('/parse-pos-structure', methods=['POST'])
